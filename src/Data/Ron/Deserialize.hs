@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-do-bind #-}
-{-# LANGUAGE BangPatterns #-}
 module Data.Ron.Deserialize
     where
 
