@@ -46,14 +46,14 @@ instance FromRon Text where
     fromRon _ = fail "Not text"
 
 instance ToRon Bool where
-    toRon = Boolean
+    toRon True = Unit "true"
+    toRon False = Unit "false"
 instance FromRon Bool where
-    fromRon (Boolean x) = pure x
     fromRon (Unit name)
-        | name == "True"  = pure True
-        | name == "False" = pure False
+        | name == "True"  || name == "true"  = pure True
+        | name == "False" || name == "false" = pure False
         | otherwise       = fail $ "Invalid enum value: " <> show name
-    fromRon _ = fail "Not a boolean or a boolean-like unit"
+    fromRon _ = fail "Not a boolean"
 
 instance (ToRon a) => ToRon (Vector.Vector a) where
     toRon = List . Vector.map toRon

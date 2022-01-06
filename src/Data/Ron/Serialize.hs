@@ -21,7 +21,6 @@ dumpsCompact = toLazyText . go where
     go (Integral x) = bshow x
     go (Floating x) = bshow x
     go (String x) = bshow x
-    go (Boolean x) = if x then "true" else "false"
     go (List xs)
         = singleton '['
        <> mconcat (map toListElem (Vector.toList xs))
@@ -30,7 +29,9 @@ dumpsCompact = toLazyText . go where
         = singleton '{'
        <> mconcat (map toMapElem (Map.toList xs))
        <> fromString "}"
-    go (Unit constructor) = fromText constructor
+    go (Unit constructor)
+        | constructor == ""  = fromText "()"
+        | otherwise          = fromText constructor
     go (Tuple mbName xs)
         = fromText mbName
        <> singleton '('

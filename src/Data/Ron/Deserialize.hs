@@ -52,12 +52,13 @@ intOrFloat = go <* ws where
                 _ -> pure . Integral $ buildNumber 10 positive whole
     peekChar' >>= \case
         '.' -> skip1 *> (Floating <$> floating positive "0")
-        '0' -> skip1 >> peekChar' >>= \case
-            ('x') -> skip1 *> (Integral <$> hexadecimal positive)
-            ('o') -> skip1 *> (Integral <$> octal positive)
-            ('b') -> skip1 *> (Integral <$> binary positive)
-            ('.') -> skip1 *> (Floating <$> floating positive "0")
-            _ -> intOrFloatSimple
+        '0' -> skip1 >> peekChar >>= \case
+            Nothing -> pure $ Integral 0
+            Just ('x') -> skip1 *> (Integral <$> hexadecimal positive)
+            Just ('o') -> skip1 *> (Integral <$> octal positive)
+            Just ('b') -> skip1 *> (Integral <$> binary positive)
+            Just ('.') -> skip1 *> (Floating <$> floating positive "0")
+            Just _ -> intOrFloatSimple
         _ -> intOrFloatSimple
 
 buildNumber :: Integer -> Bool -> Text -> Integer

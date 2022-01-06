@@ -18,7 +18,7 @@ import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Vector (Vector)
-import Test.QuickCheck (sized, Arbitrary, arbitrary, Gen, oneof, shuffle, chooseInt)
+import Test.QuickCheck (sized, Arbitrary, arbitrary, Gen, oneof, shuffle, chooseInt, elements, listOf)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
@@ -36,7 +36,6 @@ data Value
     = Integral !Integer
     | Floating !Double
     | String   !Text
-    | Boolean  !Bool
     | List     !(Vector Value)
     | Map      !(Map Value Value)
     | Unit     !Text
@@ -50,21 +49,20 @@ hashValue :: Int -> Value -> Int
 hashValue s (Integral x)  = s `hashWithSalt` (0::Int) `hashWithSalt` x
 hashValue s (Floating x)  = s `hashWithSalt` (1::Int) `hashWithSalt` x
 hashValue s (String x)    = s `hashWithSalt` (2::Int) `hashWithSalt` x
-hashValue s (Boolean x)   = s `hashWithSalt` (3::Int) `hashWithSalt` x
 hashValue s (List xs)     = foldl' hashWithSalt
-                            (s `hashWithSalt` (4::Int))
+                            (s `hashWithSalt` (3::Int))
                             xs
 hashValue s (Map xs)      = Map.foldlWithKey'
                             (\acc k v -> acc `hashWithSalt` k `hashWithSalt` v)
-                            (s `hashWithSalt` (5::Int))
+                            (s `hashWithSalt` (4::Int))
                             xs
-hashValue s (Unit n)      = s `hashWithSalt` (6::Int) `hashWithSalt` n
+hashValue s (Unit n)      = s `hashWithSalt` (5::Int) `hashWithSalt` n
 hashValue s (Tuple n xs)  = foldl' hashWithSalt
-                            (s `hashWithSalt` (7::Int) `hashWithSalt` n)
+                            (s `hashWithSalt` (6::Int) `hashWithSalt` n)
                             xs
 hashValue s (Record n xs) = Map.foldlWithKey'
                             (\acc k v -> acc `hashWithSalt` k `hashWithSalt` v)
-                            (s `hashWithSalt` (8::Int) `hashWithSalt` n)
+                            (s `hashWithSalt` (7::Int) `hashWithSalt` n)
                             xs
 
 instance Hashable Value where
@@ -77,7 +75,6 @@ instance TH.Lift Value where
     lift (Floating x) = [| Floating x |]
     lift (String x) = [| String (Text.pack s) |]
         where s = Text.unpack x
-    lift (Boolean x) = [| Boolean  x |]
     lift (List x) = [| List (Vector.fromList a) |]
         where a = Vector.toList x
     lift (Map x) = [| Map (Map.fromAscList m) |]
@@ -107,20 +104,32 @@ arbValue :: Int -> Gen Value
 arbValue size
     | size <= 0 = oneof
         [ Integral <$> arbitrary
-        , Floating <$> arbitrary
+        , Floating <$> arbitrary -- not roundtrippable
         , String <$> arbText
-        , Boolean <$> arbitrary
-        , Unit <$> arbText
+        , Unit <$> arbIdentifier
         ]
     | otherwise = oneof
         [ List <$> arbList size
         , Map <$> arbMap size
-        , liftA2 Tuple arbText (arbList size)
-        , liftA2 Record arbText (arbRecord size)
+        , Tuple "" <$> arbTuple size
+        , Record "" <$> arbRecord size
+        , liftA2 Tuple arbIdentifier (arbTuple size)
+        , liftA2 Record arbIdentifier (arbRecord size)
         ]
 
 arbText :: Gen Text
 arbText = Text.pack <$> arbitrary
+
+arbIdentifier :: Gen Text
+arbIdentifier = do
+    h <- arbStartIdentifier
+    t <- listOf arbKeyword
+    pure . Text.pack $ h:t
+    where
+        starts = ['a'..'z'] <> ['A'..'Z'] <> ['_']
+        keyword = starts <> ['0'..'9'] <> ['\'']
+        arbStartIdentifier = elements starts
+        arbKeyword = elements keyword
 
 arbList :: Int -> Gen (Vector Value)
 arbList size = do
@@ -133,11 +142,20 @@ arbMap size = do
     let makeElem s = liftA2 (,) (arbValue 0) (arbValue s)
     Map.fromList <$> traverse makeElem sizes
 
+arbTuple :: Int -> Gen (Vector Value)
+arbTuple size = do
+    sizes <- arbPartition (size - 1)
+    firstSize <- if size <= 1 then pure 0 else chooseInt (1, size-1)
+    first <- arbValue firstSize
+    Vector.fromList . (first:) <$> traverse arbValue sizes
+
 arbRecord :: Int -> Gen (Map Text Value)
 arbRecord size = do
     sizes <- arbPartition (size - 1)
-    let makeElem s = liftA2 (,) arbText (arbValue s)
-    Map.fromList <$> traverse makeElem sizes
+    let makeElem s = liftA2 (,) arbIdentifier (arbValue s)
+    firstSize <- if size <= 1 then pure 0 else chooseInt (1, size-1)
+    first <- makeElem firstSize
+    Map.fromList . (first:) <$> traverse makeElem sizes
 
 -- | Produces new sizes for recursion
 arbPartition :: Int -> Gen [Int]
