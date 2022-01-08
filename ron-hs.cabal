@@ -18,6 +18,7 @@ library
       Data.Ron.Deserialize
       Data.Ron.Serialize
       Data.Ron.Value
+      Data.Ron.Value.Internal
   other-modules:
       Paths_ron_hs
   hs-source-dirs:
@@ -32,6 +33,7 @@ library
       QuickCheck
     , attoparsec
     , base
+    , bytestring
     , containers
     , hashable
     , template-haskell

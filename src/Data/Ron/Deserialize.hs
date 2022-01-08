@@ -107,11 +107,16 @@ floating positive !wholeStr = do
     let !fracPart = fromInteger $! buildNumber 10 positive fracStr
     let !wholePart = fromInteger $! buildNumber 10 positive wholeStr
     let !shift = fromIntegral $! Text.length fracStr
-    !e <- (satisfy (\w -> w == 'e' || w == 'E') *> decimal True) <|> pure 0
+    !e <- (satisfy (\w -> w == 'e' || w == 'E') *> decimal') <|> pure 0
     let !mantissa = wholePart * 10^shift + fracPart
     let !power = e - shift
     ws
     pure $! mantissa * 10^^power
+    where
+        decimal' = anyChar >>= \case
+            '+' -> decimal True
+            '-' -> decimal False
+            _ -> fail "Expected + or - (scientific notation power)"
 
 --- Strings ---
 

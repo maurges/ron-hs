@@ -1,7 +1,13 @@
 module Data.Ron.Serialize
     where
 
-import Data.Text.Lazy.Builder (fromText, toLazyText, singleton, fromString, Builder)
+import Data.ByteString.Builder (toLazyByteString)
+import Data.ByteString.Builder.Prim (condB, (>$<), (>*<), liftFixedToBounded, char7, word8, char8, word16HexFixed)
+import Data.Char (ord)
+import Data.Text.Encoding (encodeUtf8BuilderEscaped)
+import Data.Text.Lazy.Builder (fromText, fromLazyText, toLazyText, singleton, fromString, Builder)
+import Data.Text.Lazy.Encoding (decodeUtf8)
+import Data.Word (Word8)
 
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Lazy
@@ -20,7 +26,23 @@ dumpsCompact = toLazyText . go where
     --
     go (Integral x) = bshow x
     go (Floating x) = bshow x
-    go (String x) = bshow x
+    go (String x) = singleton '"' <> encoded <> singleton '"' where
+        encoded = fromLazyText . decodeUtf8 . toLazyByteString . encodeUtf8BuilderEscaped escape $ x
+        escape
+            = condB (== c2w '\\' ) (ascii2 ('\\','\\'))
+            $ condB (== c2w '\"' ) (ascii2 ('\\','"' ))
+            $ condB (== c2w '\b' ) (ascii2 ('\\','b' ))
+            $ condB (== c2w '\f' ) (ascii2 ('\\','f' ))
+            $ condB (== c2w '\n' ) (ascii2 ('\\','n' ))
+            $ condB (== c2w '\r' ) (ascii2 ('\\','r' ))
+            $ condB (== c2w '\t' ) (ascii2 ('\\','t' ))
+            $ condB (>= c2w ' '  ) (liftFixedToBounded word8)
+            $ liftFixedToBounded hexEscape -- fallback for chars < 0x20
+        hexEscape = (\c -> ('\\', ('u', fromIntegral c))) >$<
+            char8 >*< char8 >*< word16HexFixed
+        c2w :: Char -> Word8
+        c2w = fromIntegral . ord
+        ascii2 cs = liftFixedToBounded $ const cs >$< char7 >*< char7
     go (List xs)
         = singleton '['
        <> mconcat (map toListElem (Vector.toList xs))

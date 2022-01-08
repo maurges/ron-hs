@@ -101,13 +101,15 @@ instance Arbitrary Value where
     -- what the hell is 'shrink'?
 
 arbValue :: Int -> Gen Value
-arbValue size
-    | size <= 0 = oneof
+arbValue = arbValue' True
+
+arbValue' :: Bool -> Int -> Gen Value
+arbValue' allowFloat size
+    | size <= 0 = oneof $
         [ Integral <$> arbitrary
-        , Floating <$> arbitrary -- not roundtrippable
         , String <$> arbText
         , Unit <$> arbIdentifier
-        ]
+        ] <> if allowFloat then [Floating <$> arbitrary] else []
     | otherwise = oneof
         [ List <$> arbList size
         , Map <$> arbMap size
@@ -139,7 +141,7 @@ arbList size = do
 arbMap :: Int -> Gen (Map Value Value)
 arbMap size = do
     sizes <- arbPartition (size - 1)
-    let makeElem s = liftA2 (,) (arbValue 0) (arbValue s)
+    let makeElem s = liftA2 (,) (arbValue' False 0) (arbValue s)
     Map.fromList <$> traverse makeElem sizes
 
 arbTuple :: Int -> Gen (Vector Value)
