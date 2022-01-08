@@ -24,7 +24,58 @@ loads = parseOnly (ws *> toplevel <* endOfInput)
 
 
 toplevel :: Parser Value
-toplevel = value
+toplevel = peekChar' >>= \case
+    -- raw string, algebraic struct, or a field in toplevel 'record'
+    'r' -> skip1 >> peekChar >>= \case
+        Nothing -> pure $ Unit "r"
+        Just '#' -> String <$> ronRawString
+        Just '\"' -> String <$> ronRawString
+        _ -> do
+            ident <- cons 'r' <$> takeWhile isKeyword
+            ws
+            peekChar >>= \case
+                Just '(' -> recordOrTuple ident >>= toplevelList
+                Just ':' -> toplevelRecord ident
+                _ -> ws *> pure (Unit ident)
+    c | startsIdentifier c -> do
+            ident <- takeWhile isKeyword
+            ws
+            peekChar >>= \case
+                Just '(' -> recordOrTuple ident >>= toplevelList
+                Just ':' -> skip1 *> ws *> toplevelRecord ident
+                _ -> ws *> toplevelList (Unit ident)
+      | otherwise -> value >>= toplevelList
+
+toplevelList :: Value -> Parser Value
+toplevelList first = peekChar >>= \case
+    Just ',' -> do
+        skip1 -- ,
+        ws
+        xs <- sepBy value (char ',' *> ws)
+        option () $ char ',' *> ws
+        pure . List . Vector.fromList $ first:xs
+    _ -> pure first
+
+toplevelRecord :: Text -> Parser Value
+toplevelRecord firstField = do
+    firstValue <- value
+    let initial = (firstField, firstValue)
+    peekChar >>= \case
+        Just ',' -> do
+            skip1 -- ,
+            ws
+            let pair = do
+                    k <- liftA2 cons (satisfy startsIdentifier) (takeWhile isKeyword)
+                    ws
+                    char ':'
+                    ws
+                    v <- value
+                    pure (k, v)
+            xs <- sepBy pair (char ',' *> ws)
+            option () $ char ',' *> ws
+            pure . Record "" . Map.fromList $ initial:xs
+        Nothing -> pure . Record "" . Map.fromList $ [initial]
+        _ -> fail "Expecting , at toplevel record"
 
 value :: Parser Value
 value = peekChar' >>= \case
@@ -49,7 +100,7 @@ intOrFloat = go <* ws where
             whole <- takeWhile (\c -> decimalDigit c || c == '_')
             peekChar >>= \case
                 Just '.' -> skip1 *> (Floating <$> floating positive whole)
-                _ -> pure . Integral $ buildNumber 10 positive whole
+                _ -> ws *> pure (Integral $ buildNumber 10 positive whole)
     peekChar' >>= \case
         '.' -> skip1 *> (Floating <$> floating positive "0")
         '0' -> skip1 >> peekChar >>= \case
@@ -92,13 +143,13 @@ buildNumber base positive digits = mbNegate . Text.foldl' step 0 $ digits where
         _ -> error "Not a number"
 
 hexadecimal positive
-    = buildNumber 16 positive <$> takeWhile (\c -> c == '_' || hexadecimalDigit c)
+    = buildNumber 16 positive <$> takeWhile (\c -> c == '_' || hexadecimalDigit c) <* ws
 decimal positive
-    = buildNumber 10 positive <$> takeWhile (\c -> c == '_' || decimalDigit c)
+    = buildNumber 10 positive <$> takeWhile (\c -> c == '_' || decimalDigit c) <* ws
 octal positive
-    = buildNumber 8 positive <$> takeWhile (\c -> c == '_' || octalDigit c)
+    = buildNumber 8 positive <$> takeWhile (\c -> c == '_' || octalDigit c) <* ws
 binary positive
-    = buildNumber 2 positive <$> takeWhile (\c -> c == '_' || binaryDigit c)
+    = buildNumber 2 positive <$> takeWhile (\c -> c == '_' || binaryDigit c) <* ws
 
 floating :: Bool -> Text -> Parser Double
 floating positive !wholeStr = do
@@ -190,17 +241,16 @@ ronMap = do
 recordOrTuple :: Text -> Parser Value
 recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
     -- either a value or an identifier (or end)
-    -- identifier overlaps with record field
+    -- identifier overlaps with 'record' field
     ')' -> skip1 *> ws *> pure (Unit name)
     'r' -> skip1 >> peekChar' >>= \case
         c | c == '#' || c == '\"' -> do
             val <- String <$> ronRawString
             ws
-            option () $ char ',' *> ws
-            Tuple name <$> tuple [val]
+            Tuple name <$> tupleAndComma [val]
           | otherwise -> common (Just 'r')
     c | startsIdentifier c -> common Nothing
-        -- not starting an identifier means it's not a record field, so a tuple
+        -- not starting an identifier means it's not a 'record' field, so a 'tuple'
       | otherwise -> Tuple name <$> tuple []
   where
     common mbHead = do
@@ -210,29 +260,28 @@ recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
         peekChar' >>= \case
             ':' -> skip1 *> ws *> do
                 v <- value
-                peekChar' >>= \case
-                    ',' -> skip1 *> ws
-                    _ -> pure ()
-                Record name <$> record [(ident, v)]
-            '(' -> do -- a tuple with first element as a tuple or record
+                Record name <$> recordAndComma [(ident, v)]
+            '(' -> do -- a 'tuple' with first element as a 'tuple' or 'record'
                 val <- recordOrTuple ident
-                peekChar' >>= \case
-                    ',' -> skip1 *> ws
-                    _ -> pure ()
-                Tuple name <$> tuple [val]
+                Tuple name <$> tupleAndComma [val]
             ',' -> skip1 *> ws *> (Tuple name <$> tuple [Unit ident])
             ')' -> skip1 *> ws *> pure (Tuple name (Vector.fromList [Unit ident]))
             _ -> fail "Expecting expecting ':', ',' or '('"
 
-tuple :: [Value] -> Parser (Vector Value)
+
+tuple, tupleAndComma :: [Value] -> Parser (Vector Value)
 tuple initial = do
     xs <- sepBy value (char ',' *> ws)
     option () $ char ',' *> ws
     char ')'
     ws
     pure . Vector.fromList $ initial <> xs
+tupleAndComma initial = anyChar >>= \case
+    ',' -> ws *> tuple initial
+    ')' -> ws *> pure (Vector.fromList initial)
+    _ -> fail "Expecting ',' or ')' in tuple"
 
-record :: [(Text, Value)] -> Parser (Map Text Value)
+record, recordAndComma :: [(Text, Value)] -> Parser (Map Text Value)
 record initial = do
     let pair = do
             k <- liftA2 cons (satisfy startsIdentifier) (takeWhile isKeyword)
@@ -246,8 +295,12 @@ record initial = do
     char ')'
     ws
     pure . Map.fromList $ initial <> xs
+recordAndComma initial = anyChar >>= \case
+    ',' -> ws *> record initial
+    ')' -> ws *> pure (Map.fromList initial)
+    _ -> fail "Expecting ',' or ')' in record"
 
--- Algebraic struct (named unit, record, tuple) or a raw string
+-- Algebraic struct (named unit, 'record', 'tuple') or a raw string
 identifierLike :: Char -> Parser Value
 identifierLike 'r' = skip1 >> peekChar >>= \case
     Nothing -> pure $ Unit "r"
@@ -258,13 +311,13 @@ identifierLike 'r' = skip1 >> peekChar >>= \case
         ws
         peekChar >>= \case
             Just '(' -> recordOrTuple name
-            _ -> pure $ Unit name
+            _ -> ws *> pure (Unit name)
 identifierLike _ = do
     name <- takeWhile isKeyword
     ws
     peekChar >>= \case
         Just '(' -> recordOrTuple name
-        _ -> pure $ Unit name
+        _ -> ws *> pure (Unit name)
 
 ws :: Parser ()
 ws = skipWhile isSpace >> peekChar >>= \case
