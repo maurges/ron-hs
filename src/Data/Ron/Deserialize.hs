@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-do-bind #-}
 module Data.Ron.Deserialize
-    where
+    ( loads
+    ) where
 
 import Control.Applicative ((<|>), liftA2)
 import Data.Char (isAlpha, isAlphaNum, chr)
@@ -19,10 +20,30 @@ import Data.Ron.Value
 import Prelude hiding (takeWhile)
 
 
+-- Each parser function assumes there is no whitespace before it, and must
+-- consume all whitespace after it.
+--
+-- Parsers don't backtrack at all (except a few characters back sometimes
+-- internally). It's mostly possible to understand what value is in front of us
+-- by its first character, but sometimes we do have to parse the whole
+-- identifier or number to see what character comes after it. The parsers xOrY
+-- take care of that.
+-- But just using those xOrY is not enough at times, since I didn't figure out
+-- how to compose them properly: there are a lot of places where this ambiguity
+-- arises. So i just duplicated that code. It's still not that bad, but could
+-- be a lot better..
+--
+-- Also, fucking raw strings. Why not just start them with '#'?
+
+
+-- | Parse a string to a  'Value'. The error is produced by attoparsec and is
+-- not very useful.
 loads :: Text -> Either String Value
 loads = parseOnly (ws *> toplevel <* endOfInput)
 
 
+-- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
+-- 'value'. The first two are hs-ron extensions
 toplevel :: Parser Value
 toplevel = peekChar' >>= \case
     -- raw string, algebraic struct, or a field in toplevel 'record'
@@ -169,7 +190,9 @@ floating positive !wholeStr = do
             '-' -> decimal False
             _ -> fail "Expected + or - (scientific notation power)"
 
+
 --- Strings ---
+
 
 ronString :: Parser Text
 ronString = skip1 *> (Text.toStrict . Builder.toLazyText <$> go mempty) <* skip1 <* ws
@@ -208,7 +231,9 @@ ronRawString = do
     ws
     pure r
 
+
 --- List, Map ---
+
 
 list :: Parser (Vector Value)
 list = do
@@ -236,7 +261,9 @@ ronMap = do
     ws
     pure . Map.fromList $ xs
 
+
 --- Algeraic types
+
 
 recordOrTuple :: Text -> Parser Value
 recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
@@ -300,7 +327,7 @@ recordAndComma initial = anyChar >>= \case
     ')' -> ws *> pure (Map.fromList initial)
     _ -> fail "Expecting ',' or ')' in record"
 
--- Algebraic struct (named unit, 'record', 'tuple') or a raw string
+-- | Algebraic struct (named unit, 'record', 'tuple') or a raw string
 identifierLike :: Char -> Parser Value
 identifierLike 'r' = skip1 >> peekChar >>= \case
     Nothing -> pure $ Unit "r"
@@ -319,6 +346,10 @@ identifierLike _ = do
         Just '(' -> recordOrTuple name
         _ -> ws *> pure (Unit name)
 
+
+--- Common ---
+
+-- | Whitespace and comment skipper
 ws :: Parser ()
 ws = skipWhile isSpace >> peekChar >>= \case
     Nothing -> pure ()

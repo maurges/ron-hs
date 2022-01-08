@@ -1,5 +1,6 @@
 module Data.Ron.Serialize
-    where
+    ( dumpsCompact
+    ) where
 
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Builder.Prim (condB, (>$<), (>*<), liftFixedToBounded, char7, word8, char8, word16HexFixed)
@@ -16,6 +17,9 @@ import qualified Data.Vector as Vector
 import Data.Ron.Value
 
 
+-- | Dumps a RON 'Value' as a compact string with minimum whitespace, but a lot of commas
+--
+-- TODO: less commas. And also we need a non-compact dumper
 dumpsCompact :: Value -> Lazy.Text
 dumpsCompact = toLazyText . go where
     bshow :: Show a => a -> Builder

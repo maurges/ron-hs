@@ -6,9 +6,11 @@ import Data.Ron.Value.Internal (similar)
 import Data.Text.Lazy (toStrict)
 import Test.Tasty.QuickCheck (testProperty)
 
+import ForExample (exampleTests)
+
 import Test.Tasty
 
-main = defaultMain $ testGroup "properties" [loads_dumps]
+main = defaultMain $ testGroup "properties" [loads_dumps, exampleTests]
 
 loads_dumps = testProperty "loads . dumps = id" $
     \value -> case loads . toStrict . dumpsCompact $ value of

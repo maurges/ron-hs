@@ -1,5 +1,7 @@
 module Data.Ron.Class
-    where
+    ( ToRon (..), FromRon (..)
+    , ParseResult
+    ) where
 
 import Control.Arrow ((***))
 import Control.Applicative (liftA2)
@@ -12,13 +14,18 @@ import Data.Ron.Value
 import Prelude hiding (fail)
 
 
+-- | In the future this might become more smart and report the error location.
+-- In the present we don't even have the notion of "location" in RON. So this
+-- sort-of MonadFail thing will do
 type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
 
+-- | A class of values that can be encoded to RON format
 class ToRon a where
     toRon :: a -> Value
 
+-- | A class of values that can be from RON format
 class FromRon a where
     fromRon :: Value -> ParseResult a
 

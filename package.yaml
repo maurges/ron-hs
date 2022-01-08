@@ -9,6 +9,12 @@ ghc-options:
 - -Wall -Wcompat
 - -Werror=incomplete-patterns
 
+default-extensions:
+- LambdaCase
+- OverloadedStrings
+- MultiWayIf
+- BangPatterns
+
 library:
   source-dirs:         src
   dependencies:
@@ -21,11 +27,6 @@ library:
   - text
   - vector
   - QuickCheck
-  default-extensions:
-  - LambdaCase
-  - OverloadedStrings
-  - MultiWayIf
-  - BangPatterns
 
 tests:
   test:
@@ -36,6 +37,7 @@ tests:
     - ron-hs
     - QuickCheck
     - tasty
+    - tasty-hunit
     - tasty-quickcheck
     - text
     ghc-options:

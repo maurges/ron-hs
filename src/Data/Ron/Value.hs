@@ -10,7 +10,8 @@
 #endif
 
 module Data.Ron.Value
-    where
+    ( Value (..)
+    ) where
 
 import Control.Applicative (liftA2)
 import Data.Hashable (Hashable, hashWithSalt)
@@ -32,6 +33,13 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- Map -> HashMap, List of tuples, Vector of tuples (especially for record)
 -- Vector -> List (for tuples)
 -- NonEmpty for tuple and record? Or unify unit with both of them
+-- | A RON value represented in haskell. This is the intermediate
+-- representation between string and your own type.
+--
+-- @()@ is represented as @Unit ""@
+--
+-- 'Tuple' and 'Record' contents are not empty when parsed, since the empty
+-- contents denote a 'Tuple'
 data Value
     = Integral !Integer
     | Floating !Double
