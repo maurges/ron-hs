@@ -21,6 +21,7 @@ datatypes.
         all_datatypes: (
             int: 1_337_322_228,
             float: 2.718281828,
+            char: 'ы',
             string: "hello string\n",
             raw_string: r##"raw "string", still unicode"##,
             list: ["homogenous", "elements"],

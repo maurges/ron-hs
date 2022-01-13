@@ -101,6 +101,7 @@ toplevelRecord firstField = do
 value :: Parser Value
 value = peekChar' >>= \case
     c | startsNumber c -> intOrFloat
+      | startsChar c -> Char <$> character
       | startsString c -> String <$> ronString
       | startsList c -> List <$> list
       | startsMap c -> Map <$> ronMap
@@ -126,10 +127,10 @@ intOrFloat = go <* ws where
         '.' -> skip1 *> (Floating <$> floating positive "0")
         '0' -> skip1 >> peekChar >>= \case
             Nothing -> pure $ Integral 0
-            Just ('x') -> skip1 *> (Integral <$> hexadecimal positive)
-            Just ('o') -> skip1 *> (Integral <$> octal positive)
-            Just ('b') -> skip1 *> (Integral <$> binary positive)
-            Just ('.') -> skip1 *> (Floating <$> floating positive "0")
+            Just 'x' -> skip1 *> (Integral <$> hexadecimal positive)
+            Just 'o' -> skip1 *> (Integral <$> octal positive)
+            Just 'b' -> skip1 *> (Integral <$> binary positive)
+            Just '.' -> skip1 *> (Floating <$> floating positive "0")
             Just _ -> intOrFloatSimple
         _ -> intOrFloatSimple
 
@@ -137,7 +138,7 @@ buildNumber :: Integer -> Bool -> Text -> Integer
 buildNumber base positive digits = mbNegate . Text.foldl' step 0 $ digits where
     mbNegate = if positive then id else negate
     step !a '_' = a
-    step !a !d = a * base + (toDigit d)
+    step !a !d = a * base + toDigit d
     toDigit = \case
         '0' -> 0
         '1' -> 1
@@ -194,6 +195,26 @@ floating positive !wholeStr = do
 --- Strings ---
 
 
+character :: Parser Char
+character = skip1 >> anyChar >>= \case
+  '\\' -> escapedChar <* char '\''
+  c -> pure c <* char '\''
+
+escapedChar :: Parser Char
+escapedChar = anyChar >>= \case
+  '\\' -> pure '\\'
+  '\"' -> pure '\"'
+  'b' -> pure '\b'
+  'f' -> pure '\f'
+  'n' -> pure '\n'
+  'r' -> pure '\r'
+  't' -> pure '\t'
+  'u' -> do
+      digits <- count 4 $ satisfy hexadecimalDigit
+      let code = fromIntegral . buildNumber 16 True . Text.pack $ digits
+      pure $ chr code
+  _ -> fail "Invalid escape sequence"
+
 ronString :: Parser Text
 ronString = skip1 *> (Text.toStrict . Builder.toLazyText <$> go mempty) <* skip1 <* ws
   where
@@ -203,19 +224,10 @@ ronString = skip1 *> (Text.toStrict . Builder.toLazyText <$> go mempty) <* skip1
         let !r = builder <> Builder.fromText chunk
         peekChar' >>= \case
             '\"' -> pure r
-            '\\' -> skip1 >> peekChar' >>= \case
-                '\\' -> skip1 *> go (r <> Builder.singleton '\\')
-                '\"' -> skip1 *> go (r <> Builder.singleton '\"')
-                'b' -> skip1 *> go (r <> Builder.singleton '\b')
-                'f' -> skip1 *> go (r <> Builder.singleton '\f')
-                'n' -> skip1 *> go (r <> Builder.singleton '\n')
-                'r' -> skip1 *> go (r <> Builder.singleton '\r')
-                't' -> skip1 *> go (r <> Builder.singleton '\t')
-                'u' -> skip1 *> do
-                    digits <- count 4 $ satisfy hexadecimalDigit
-                    let code = fromIntegral . buildNumber 16 True . Text.pack $ digits
-                    go $ r <> Builder.singleton (chr code)
-                _ -> fail "Invalid escape sequence"
+            '\\' -> do
+              skip1
+              c <- escapedChar
+              go $ r <> Builder.singleton c
             _ -> error "takeTill took till wrong character (not \" or \\)"
 
 ronRawString :: Parser Text
@@ -281,8 +293,7 @@ recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
       | otherwise -> Tuple name <$> tuple []
   where
     common mbHead = do
-        ident <- case mbHead of {Nothing -> id; Just c -> cons c}
-                 <$> takeWhile isKeyword
+        ident <- maybe id cons mbHead <$> takeWhile isKeyword
         ws
         peekChar' >>= \case
             ':' -> skip1 *> ws *> do
@@ -376,6 +387,7 @@ startsList c = c == '['
 startsMap c = c == '{'
 startsStruct c = c == '('
 startsIdentifier c = isAlpha c || c == '_' -- this can also be a raw string
+startsChar c = c == '\''
 
 binaryDigit c = c == '0' || c == '1'
 octalDigit c = binaryDigit c || c == '2' || c == '3' || c == '4'

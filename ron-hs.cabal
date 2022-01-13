@@ -10,6 +10,7 @@ synopsis:       RON format implementation in haskell
 author:         d86leader
 maintainer:     d86leader@mail.com
 license:        BSD3
+license-file:   LICENSE
 build-type:     Simple
 
 library

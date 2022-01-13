@@ -43,6 +43,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 data Value
     = Integral !Integer
     | Floating !Double
+    | Char     !Char
     | String   !Text
     | List     !(Vector Value)
     | Map      !(Map Value Value)
@@ -56,21 +57,22 @@ data Value
 hashValue :: Int -> Value -> Int
 hashValue s (Integral x)  = s `hashWithSalt` (0::Int) `hashWithSalt` x
 hashValue s (Floating x)  = s `hashWithSalt` (1::Int) `hashWithSalt` x
-hashValue s (String x)    = s `hashWithSalt` (2::Int) `hashWithSalt` x
+hashValue s (Char x)      = s `hashWithSalt` (2::Int) `hashWithSalt` x
+hashValue s (String x)    = s `hashWithSalt` (3::Int) `hashWithSalt` x
 hashValue s (List xs)     = foldl' hashWithSalt
-                            (s `hashWithSalt` (3::Int))
+                            (s `hashWithSalt` (4::Int))
                             xs
 hashValue s (Map xs)      = Map.foldlWithKey'
                             (\acc k v -> acc `hashWithSalt` k `hashWithSalt` v)
-                            (s `hashWithSalt` (4::Int))
+                            (s `hashWithSalt` (5::Int))
                             xs
-hashValue s (Unit n)      = s `hashWithSalt` (5::Int) `hashWithSalt` n
+hashValue s (Unit n)      = s `hashWithSalt` (6::Int) `hashWithSalt` n
 hashValue s (Tuple n xs)  = foldl' hashWithSalt
-                            (s `hashWithSalt` (6::Int) `hashWithSalt` n)
+                            (s `hashWithSalt` (7::Int) `hashWithSalt` n)
                             xs
 hashValue s (Record n xs) = Map.foldlWithKey'
                             (\acc k v -> acc `hashWithSalt` k `hashWithSalt` v)
-                            (s `hashWithSalt` (7::Int) `hashWithSalt` n)
+                            (s `hashWithSalt` (8::Int) `hashWithSalt` n)
                             xs
 
 instance Hashable Value where
@@ -81,6 +83,7 @@ instance Hashable Value where
 instance TH.Lift Value where
     lift (Integral x) = [| Integral x |]
     lift (Floating x) = [| Floating x |]
+    lift (Char x) = [| Char x |]
     lift (String x) = [| String (Text.pack s) |]
         where s = Text.unpack x
     lift (List x) = [| List (Vector.fromList a) |]
@@ -115,6 +118,7 @@ arbValue' :: Bool -> Int -> Gen Value
 arbValue' allowFloat size
     | size <= 0 = oneof $
         [ Integral <$> arbitrary
+        , Char <$> arbitrary
         , String <$> arbText
         , Unit <$> arbIdentifier
         ] <> if allowFloat then [Floating <$> arbitrary] else []

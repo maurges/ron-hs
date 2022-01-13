@@ -46,6 +46,12 @@ instance FromRon Double where
     fromRon (Floating x) = pure x
     fromRon _ = fail "Not a floating"
 
+instance ToRon Char where
+    toRon = Char
+instance FromRon Char where
+    fromRon (Char x) = pure x
+    fromRon _ = fail "Expected Char"
+
 instance ToRon Text where
     toRon = String
 instance FromRon Text where

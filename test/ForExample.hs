@@ -65,6 +65,7 @@ example1_ron = Record "TopLevelRecord"
     , ("all_datatypes", Record ""
         [ ("int", Integral 1337322228)
         , ("float", Floating 2.71828)
+        , ("char", Char 'ы')
         , ("string", String "hello string\n")
         , ("raw_string", String "raw \"string\", still unicode")
         , ("list", List [String "homogenous", String "elements"])
