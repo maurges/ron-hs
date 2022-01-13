@@ -366,18 +366,21 @@ ws = skipWhile isSpace >> peekChar >>= \case
     Nothing -> pure ()
     Just c | c == '/' -> skip1 >> anyChar >>= \case
         '/' -> skipWhile (/= '\n') >> endOr skip1 >> ws
-        '*' -> goMultiline
+        '*' -> goMultiline (1 :: Int)
         _ -> fail "Unexpected '/', not followed by a comment starting"
     _ -> pure () -- not a comment
   where
-    goMultiline = do
-        skipWhile (/= '*')
-        endOr skip1
-        endOr $ do
-            c <- anyChar
-            if c == '/'
-                then ws -- end of multiline comment, try taking some new whitespace
-                else goMultiline
+    goMultiline 0 = ws -- end of multiline comment, try taking some new whitespace
+    goMultiline level = do
+        skipWhile (\c -> c /= '*' && c /= '/')
+        endOr $ anyChar >>= \case
+            '*' -> endOr $ anyChar >>= \case
+                '/' -> goMultiline $! level - 1
+                _ -> goMultiline level
+            '/' -> endOr $ anyChar >>= \case
+                '*' -> goMultiline $! level + 1
+                _ -> goMultiline level
+            _ -> error "skipWhile skipped until unexpected character"
 
 isSpace c = c == ' ' || c == '\n' || c == '\r' || c == '\t'
 isKeyword c = isAlphaNum c || c == '_' || c == '\''

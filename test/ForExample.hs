@@ -15,12 +15,14 @@ example1_ron, example2_ron, example3_ron :: Value
 example1 = unlines
     [ "// RON supports comments"
     , "/* even multiline comments */"
+    , "/* even /* embedded /* multiline */ comments */ /* */ */"
     , "TopLevelRecord ("
     , "    field: Compound (\"this\", \"is\", \"a\", \"compound\", 123),"
 
     , "    all_datatypes: ("
     , "        int: 1_337_322_228,"
     , "        float: 2.71828,"
+    , "        char: 'ы',"
     , "        string: \"hello string\n\","
     , "        raw_string: r##\"raw \"string\", still unicode\"##,"
     , "        list: [\"homogenous\", \"elements\"],"

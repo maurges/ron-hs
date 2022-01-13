@@ -15,6 +15,7 @@ datatypes.
 
     // RON supports comments
     /* even multiline comments */
+    /* even /* embedded /* multiline */ comments */ /* */ */
     TopLevelRecord (
         field: Compound ("this", "is", "a", "compound", 123),
 
@@ -91,6 +92,3 @@ datatypes.
   maybe?
 - [ ] Should expose attoparsec's chunk-based parse so that this could be used
   with conduit or pipes.
-- [ ] [Multiline comments can be
-  nested!?](https://github.com/ron-rs/ron/blob/master/examples/decode.rs)
-  Fuck you, RON docs. Also, shit, I missed chars.
