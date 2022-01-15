@@ -19,7 +19,7 @@ import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Vector (Vector)
-import Test.QuickCheck (sized, Arbitrary, arbitrary, Gen, oneof, shuffle, chooseInt, elements, listOf)
+import Test.QuickCheck (sized, Arbitrary, arbitrary, Gen, oneof, shuffle, choose, elements, listOf)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
@@ -159,7 +159,7 @@ arbMap size = do
 arbTuple :: Int -> Gen (Vector Value)
 arbTuple size = do
     sizes <- arbPartition (size - 1)
-    firstSize <- if size <= 1 then pure 0 else chooseInt (1, size-1)
+    firstSize <- if size <= 1 then pure 0 else choose (1, size-1)
     first <- arbValue firstSize
     Vector.fromList . (first:) <$> traverse arbValue sizes
 
@@ -167,7 +167,7 @@ arbRecord :: Int -> Gen (Map Text Value)
 arbRecord size = do
     sizes <- arbPartition (size - 1)
     let makeElem s = liftA2 (,) arbIdentifier (arbValue s)
-    firstSize <- if size <= 1 then pure 0 else chooseInt (1, size-1)
+    firstSize <- if size <= 1 then pure 0 else choose (1, size-1)
     first <- makeElem firstSize
     Map.fromList . (first:) <$> traverse makeElem sizes
 
@@ -180,5 +180,5 @@ arbPartition size = case compare size 1 of
         where
             go 0 xs = pure xs
             go !s xs = do
-                x <- chooseInt (1, s)
+                x <- choose (1, s)
                 go (s - 1) (x:xs)
