@@ -4,18 +4,23 @@ module Data.Ron.Deserialize
     ) where
 
 import Control.Applicative ((<|>), liftA2)
+import Data.Attoparsec.ByteString (skip)
+import Data.ByteString.Char8 (ByteString, cons)
+import Data.ByteString.Lazy (toStrict)
 import Data.Char (isAlpha, isAlphaNum, chr)
 import Data.Map (Map)
-import Data.Text (Text, cons)
+import Data.Text (Text, uncons)
+import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Vector (Vector)
 
 import qualified Data.Map as Map
+import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Char8 as ByteString8
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as Text (toStrict)
-import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Vector as Vector
 
-import Data.Attoparsec.Text hiding (hexadecimal, decimal)
+import Data.Attoparsec.ByteString.Char8 hiding (hexadecimal, decimal, isSpace)
 import Data.Ron.Value
 import Prelude hiding (takeWhile)
 
@@ -38,7 +43,7 @@ import Prelude hiding (takeWhile)
 
 -- | Parse a string to a  'Value'. The error is produced by attoparsec and is
 -- not very useful.
-loads :: Text -> Either String Value
+loads :: ByteString -> Either String Value
 loads = parseOnly (ws *> toplevel <* endOfInput)
 
 
@@ -52,14 +57,14 @@ toplevel = peekChar' >>= \case
         Just '#' -> String <$> ronRawString
         Just '\"' -> String <$> ronRawString
         _ -> do
-            ident <- cons 'r' <$> takeWhile isKeyword
+            ident <- decodeUtf8 . cons 'r' <$> takeWhile isKeyword
             ws
             peekChar >>= \case
                 Just '(' -> recordOrTuple ident >>= toplevelList
                 Just ':' -> toplevelRecord ident
                 _ -> ws *> pure (Unit ident)
     c | startsIdentifier c -> do
-            ident <- takeWhile isKeyword
+            ident <- decodeUtf8 <$> takeWhile isKeyword
             ws
             peekChar >>= \case
                 Just '(' -> recordOrTuple ident >>= toplevelList
@@ -91,7 +96,7 @@ toplevelRecord firstField = do
                     char ':'
                     ws
                     v <- value
-                    pure (k, v)
+                    pure (decodeUtf8 k, v)
             xs <- sepBy pair (char ',' *> ws)
             option () $ char ',' *> ws
             pure . Record "" . Map.fromList $ initial:xs
@@ -134,8 +139,8 @@ intOrFloat = go <* ws where
             Just _ -> intOrFloatSimple
         _ -> intOrFloatSimple
 
-buildNumber :: Integer -> Bool -> Text -> Integer
-buildNumber base positive digits = mbNegate . Text.foldl' step 0 $ digits where
+buildNumber :: Integer -> Bool -> ByteString -> Integer
+buildNumber base positive digits = mbNegate . ByteString8.foldl' step 0 $ digits where
     mbNegate = if positive then id else negate
     step !a '_' = a
     step !a !d = a * base + toDigit d
@@ -173,13 +178,13 @@ octal positive
 binary positive
     = buildNumber 2 positive <$> takeWhile (\c -> c == '_' || binaryDigit c) <* ws
 
-floating :: Bool -> Text -> Parser Double
+floating :: Bool -> ByteString -> Parser Double
 floating positive !wholeStr = do
     -- dot is already skipped
     !fracStr <- takeWhile (\c -> c == '_' || decimalDigit c)
     let !fracPart = fromInteger $! buildNumber 10 positive fracStr
     let !wholePart = fromInteger $! buildNumber 10 positive wholeStr
-    let !shift = fromIntegral $! Text.length fracStr
+    let !shift = fromIntegral $! ByteString.length fracStr
     !e <- (satisfy (\w -> w == 'e' || w == 'E') *> decimal') <|> pure 0
     let !mantissa = wholePart * 10^shift + fracPart
     let !power = e - shift
@@ -196,14 +201,27 @@ floating positive !wholeStr = do
 
 
 character :: Parser Char
-character = skip1 >> anyChar >>= \case
-  '\\' -> escapedChar <* char '\''
-  c -> pure c <* char '\''
+character = skip1 >> peekChar' >>= \case
+  '\\' -> skip1 *> escapedChar <* char '\''
+  _ -> do
+    chunk <- takeWhile (/= '\'')
+    skip1
+    text <- case decodeUtf8' chunk of
+            Right x -> pure x
+            Left _err -> fail "Incorrect utf8 in Char"
+    case uncons text of
+        Just (c, cs) | Text.length cs == 0 -> pure c
+        _ -> fail "Incorrect length of Char content"
 
+-- This is common for string and char. It seems by the spec @\'@ is incorrect
+-- sequence for string, and @\"@ is incorrect sequence for char. I choose to
+-- parse both for both for simplicity. Coming from C++ I want to call this
+-- "undefined behaviour" in case of incorrect source RON file ;-)
 escapedChar :: Parser Char
 escapedChar = anyChar >>= \case
   '\\' -> pure '\\'
   '\"' -> pure '\"'
+  '\'' -> pure '\''
   'b' -> pure '\b'
   'f' -> pure '\f'
   'n' -> pure '\n'
@@ -211,23 +229,23 @@ escapedChar = anyChar >>= \case
   't' -> pure '\t'
   'u' -> do
       digits <- count 4 $ satisfy hexadecimalDigit
-      let code = fromIntegral . buildNumber 16 True . Text.pack $ digits
+      let code = fromIntegral . buildNumber 16 True . ByteString8.pack $ digits
       pure $ chr code
   _ -> fail "Invalid escape sequence"
 
 ronString :: Parser Text
-ronString = skip1 *> (Text.toStrict . Builder.toLazyText <$> go mempty) <* skip1 <* ws
+ronString = skip1 *> (decodeUtf8 . toStrict . Builder.toLazyByteString <$> go mempty) <* skip1 <* ws
   where
     go :: Builder.Builder -> Parser Builder.Builder
     go !builder = do
         chunk <- takeTill (\c -> c == '\"' || c == '\\')
-        let !r = builder <> Builder.fromText chunk
+        let !r = builder <> Builder.byteString chunk
         peekChar' >>= \case
             '\"' -> pure r
             '\\' -> do
               skip1
               c <- escapedChar
-              go $ r <> Builder.singleton c
+              go $ r <> Builder.charUtf8 c
             _ -> error "takeTill took till wrong character (not \" or \\)"
 
 ronRawString :: Parser Text
@@ -237,9 +255,9 @@ ronRawString = do
     let go !builder = do
             chunk <- takeWhile (/= '\"')
             skip1
-            let !r = builder <> Builder.fromText chunk
-            (string delimeter *> pure r) <|> go (r <> Builder.singleton '\"')
-    r <- Text.toStrict . Builder.toLazyText <$> go mempty
+            let !r = builder <> Builder.byteString chunk
+            (string delimeter *> pure r) <|> go (r <> Builder.char7 '\"')
+    r <- decodeUtf8 . toStrict . Builder.toLazyByteString <$> go mempty
     ws
     pure r
 
@@ -293,7 +311,7 @@ recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
       | otherwise -> Tuple name <$> tuple []
   where
     common mbHead = do
-        ident <- maybe id cons mbHead <$> takeWhile isKeyword
+        ident <- decodeUtf8 . maybe id cons mbHead <$> takeWhile isKeyword
         ws
         peekChar' >>= \case
             ':' -> skip1 *> ws *> do
@@ -327,7 +345,7 @@ record initial = do
             char ':'
             ws
             v <- value
-            pure (k, v)
+            pure (decodeUtf8 k, v)
     xs <- sepBy pair (char ',' *> ws)
     option () $ char ',' *> ws
     char ')'
@@ -345,13 +363,13 @@ identifierLike 'r' = skip1 >> peekChar >>= \case
     Just '#' -> String <$> ronRawString
     Just '\"' -> String <$> ronRawString
     _ -> do
-        name <- cons 'r' <$> takeWhile isKeyword
+        name <- decodeUtf8 . cons 'r' <$> takeWhile isKeyword
         ws
         peekChar >>= \case
             Just '(' -> recordOrTuple name
             _ -> ws *> pure (Unit name)
 identifierLike _ = do
-    name <- takeWhile isKeyword
+    name <- decodeUtf8 <$> takeWhile isKeyword
     ws
     peekChar >>= \case
         Just '(' -> recordOrTuple name

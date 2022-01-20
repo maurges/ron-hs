@@ -3,16 +3,17 @@ module ForExample where
 
 import Data.Ron.Deserialize (loads)
 import Data.Ron.Value (Value (..))
-import Data.Text (Text, unlines)
+import Data.ByteString.Char8 (ByteString, unlines)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty (testGroup)
+import Data.Text.Encoding (encodeUtf8)
 
 import Prelude hiding (unlines)
 
-example1, example2, example3 :: Text
+example1, example2, example3 :: ByteString
 example1_ron, example2_ron, example3_ron :: Value
 
-example1 = unlines
+example1 = unlines . map encodeUtf8 $
     [ "// RON supports comments"
     , "/* even multiline comments */"
     , "/* even /* embedded /* multiline */ comments */ /* */ */"
