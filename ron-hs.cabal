@@ -59,6 +59,7 @@ test-suite test
   build-depends:
       QuickCheck
     , base
+    , bytestring
     , ron-hs
     , tasty
     , tasty-hunit
