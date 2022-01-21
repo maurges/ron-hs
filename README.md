@@ -79,14 +79,19 @@ datatypes.
 
 - [ ] Benchmark and see if it's completely bad. The quickcheck tests are
   unbearable at size=50 already...
+  * Preliminary benchmarks show it's slightly worse than aeson, and a lot worse
+    than rust. I really don't known how to profile, so this needs more
+    learning.
 - [ ] Generic FromRon and ToRon instances. A good opportunity for me to learn
   ghc generics.
 - [ ] Better serializer with configurable options.
-- [ ] Maybe switch to bytestring for encoder? The bytestring builder is a lot
+- [x] Maybe switch to bytestring for encoder? The bytestring builder is a lot
   more advanced than text one.
-- [ ] Maybe switch to bytestring for decoder? The specification is unclear
+  * Did and the ergonomics are a lot better
+- [x] Maybe switch to bytestring for decoder? The specification is unclear
   whether raw sting may contain invalid unicode, and attoparsec for text is as
   good as for bytestring.
+  * Done. Performance is basically the same, but correctness is improved.
 - [ ] Do I really need Map and Vector? I just copied that part from aeson
 - [ ] See what else good there is in aeson and yank that. Loading from files
   maybe?
