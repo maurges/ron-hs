@@ -1,0 +1,32 @@
+    // RON supports comments
+    /* even multiline comments */
+    /* even /* embedded /* multiline */ comments */ /* */ */
+    TopLevelRecord (
+        field: Compound ("this", "is", "a", "compound", 123),
+
+        all_datatypes: (
+            int: 1_337_322_228,
+            float: 2.718281828,
+            char: 'ы',
+            string: "hello string\n",
+            raw_string: r##"raw "string", still unicode"##,
+            list: ["homogenous", "elements"],
+            map: {
+                "value": "as keys",
+                "also": "homogenous",
+            },
+            tuple: SomeTuple(0, OtherTuple("with", "stuff")),
+            record: SomeRecord (
+                like: "this one you're looking at",
+                not_homogenous: 2022,
+            ),
+            unit_values: [
+                (), // regular unit
+                NamedUnit,
+                NamedUnitWithBraces(),
+            ]
+        ),
+        // this for simple types
+        simple: Newtype ( ( of: ["a list for example"] ) )
+    )
+
