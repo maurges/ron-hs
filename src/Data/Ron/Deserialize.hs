@@ -202,10 +202,11 @@ floating positive !wholeStr = do
 
 character :: Parser Char
 character = skip1 >> peekChar' >>= \case
-  '\\' -> skip1 *> escapedChar <* char '\''
+  '\\' -> skip1 *> escapedChar <* char '\'' <* ws
   _ -> do
     chunk <- takeWhile (/= '\'')
     skip1
+    ws
     text <- case decodeUtf8' chunk of
             Right x -> pure x
             Left _err -> fail "Incorrect utf8 in Char"
