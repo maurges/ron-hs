@@ -35,6 +35,7 @@ data CommaStyle
 data SerializeSettins = SerializeSettins
     { commaStyle :: !CommaStyle
     , indent :: !Int
+    -- ^ Setting this to zero also disables line breaks
     , singleElementSpecial :: !Bool
     -- ^ When a compound type only contains one element, this compound value is
     -- printed on one line
@@ -48,6 +49,8 @@ data SerializeSettins = SerializeSettins
     -- ^ For compound types, does the bracket go on a new line or stays on the
     -- same line as the last element. Some people in haskell like this one as
     -- True, and I think lispers do as well
+    , spaceAfterColon :: !Bool
+    -- ^ Useful for a compact representation
     } deriving (Eq, Show)
 
 haskellStyle, rustStyle, compactStyle :: SerializeSettins
@@ -58,6 +61,7 @@ haskellStyle = SerializeSettins
     , unpackToplevel = True
     , openBracketOnSameLine = False
     , closeBracketOnSameLine = False
+    , spaceAfterColon = True
     }
 rustStyle = SerializeSettins
     { commaStyle = CommaTrailing
@@ -66,6 +70,7 @@ rustStyle = SerializeSettins
     , unpackToplevel = False
     , openBracketOnSameLine = True
     , closeBracketOnSameLine = False
+    , spaceAfterColon = True
     }
 compactStyle = SerializeSettins
     { commaStyle = CommaHistoric
@@ -74,6 +79,7 @@ compactStyle = SerializeSettins
     , unpackToplevel = False
     , openBracketOnSameLine = True
     , closeBracketOnSameLine = True
+    , spaceAfterColon = False
     }
 
 dumps :: SerializeSettins -> Value -> Lazy.ByteString
@@ -81,15 +87,16 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
     deeper !lvl = lvl + indent
     nl  = if indent == 0 then mempty else char7 '\n'
     shift lvl = string7 $ replicate lvl ' '
-    bracketOpen lvl c
+    bracketOpen afterColon lvl c
         | indent == 0  = char7 c
-        | openBracketOnSameLine  = char7 c <> nl <> shift (deeper lvl)
+        | openBracketOnSameLine  = spc <> char7 c <> nl <> shift (deeper lvl)
             <> if commaStyle == CommaLeading
                 then char7 ' ' <> char7 ' '
                 else mempty
         | commaStyle == CommaLeading  =
             nl <> shift (deeper lvl) <> char7 c <> char7 ' '
         | otherwise  = nl <> shift lvl <> char7 c <> nl <> shift (deeper lvl)
+            where spc = if afterColon && spaceAfterColon then char7 ' ' else mempty
     bracketClose lvl c
         | indent == 0  = char7 c
         | closeBracketOnSameLine  = char7 ' ' <> char7 c
@@ -112,50 +119,59 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
             v -> go 0 v
         else go 0
     --
-    go !lvl = \case
-        Integral x -> integerDec x
-        Floating x -> doubleDec x
-        Char x -> char7 '\'' <> encodeChar x <> char7 '\''
-        String x -> char7 '"' <> encodeString x <> char7 '"'
-        Unit name -> if Text.null name
+    go = go' False
+    go' !afterColon !lvl = \case
+        Integral x -> spc <> integerDec x
+        Floating x -> spc <> doubleDec x
+        Char x -> spc <> char7 '\'' <> encodeChar x <> char7 '\''
+        String x -> spc <> char7 '"' <> encodeString x <> char7 '"'
+        Unit name -> spc <> if Text.null name
             then string7 "()"
             else fromText name
         List xs
-            | null xs -> string7 "[]"
+            | null xs -> spc <> string7 "[]"
             | singleElementSpecial && isSimple (List xs)
                 -> let !x = Vector.unsafeHead xs
-                   in string7 "[ " <> go lvl x <> string7 " ]"
-            | otherwise -> bracketOpen lvl '[' <> listContent (deeper lvl) xs <> bracketClose lvl ']'
+                   in spc <> string7 "[ " <> go lvl x <> string7 " ]"
+            | otherwise -> bracketOpen afterColon lvl '[' <> listContent (deeper lvl) xs <> bracketClose lvl ']'
         Map xs
-            | null xs -> string7 "{}"
+            | null xs -> spc <> string7 "{}"
             | singleElementSpecial && isSimple (Map xs)
                 -> let (!k, !v) = head . Map.toList $ xs
-                   in string7 "{ " <> go lvl k <> string7 ": " <> go lvl v <> string7 " }"
-            | otherwise -> bracketOpen lvl '{' <> mapContent (deeper lvl) xs <> bracketClose lvl '}'
-        Tuple mbName xs ->
-            let
-              name = if Text.null mbName then mempty else fromText mbName <> char7 ' '
-              content = if singleElementSpecial && isSimple (Tuple mbName xs)
-                    then let !x = Vector.unsafeHead xs
-                         in string7 "( " <> go lvl x <> string7 " )"
-                    else bracketOpen lvl '(' <> listContent (deeper lvl) xs <> bracketClose lvl ')'
-            in name <> content
-        Record mbName xs ->
-            let
-              name = if Text.null mbName then mempty else fromText mbName <> char7 ' '
-              content = if singleElementSpecial && isSimple (Record mbName xs)
-                    then let (!k, !v) = head . Map.toList $ xs
-                         in string7 "( " <> fromText k <> string7": " <> go lvl v <> string7 " )"
-                    else bracketOpen lvl '(' <> recordContent (deeper lvl) xs <> bracketClose lvl ')'
-            in name <> content
+                   in spc <> string7 "{ " <> go lvl k <> char7 ':' <> go' True lvl v <> string7 " }"
+            | otherwise -> bracketOpen afterColon lvl '{' <> mapContent (deeper lvl) xs <> bracketClose lvl '}'
+        Tuple name xs
+            | singleElementSpecial && isSimple (Tuple name xs) ->
+                let !x = Vector.unsafeHead xs
+                    nameB = if Text.null name
+                        then mempty
+                        else fromText name <> char7 ' '
+                in spc <> nameB <> string7 "( " <> go lvl x <> string7 " )"
+            | Text.null name ->
+                bracketOpen afterColon lvl '(' <> listContent (deeper lvl) xs <> bracketClose lvl ')'
+            | otherwise ->
+                spc <> fromText name <> bracketOpen True lvl '(' <> listContent (deeper lvl) xs <> bracketClose lvl ')'
+        Record name xs
+            | singleElementSpecial && isSimple (Record name xs) ->
+                let (!k, !v) = head . Map.toList $ xs
+                    nameB = if Text.null name
+                        then mempty
+                        else fromText name <> char7 ' '
+                in spc <> nameB <> string7 "( " <> fromText k <> char7 ':' <> go' True lvl v <> string7 " )"
+            | Text.null name ->
+                bracketOpen afterColon lvl '(' <> recordContent (deeper lvl) xs <> bracketClose lvl ')'
+            | otherwise ->
+                spc <> fromText name <> bracketOpen True lvl '(' <> recordContent (deeper lvl) xs <> bracketClose lvl ')'
+        where
+            spc = if afterColon && spaceAfterColon then char7 ' ' else mempty
     --
     listContent lvl = (<> trailingComma) . mconcat . intersperse (comma lvl) . map (go lvl) . Vector.toList
     --
     mapContent lvl = (<> trailingComma) . mconcat . intersperse (comma lvl) . map toElem . Map.toList where
-        toElem (k, v) = go lvl k <> string7 ": " <> go lvl v
+        toElem (k, v) = go lvl k <> char7 ':' <> go' True lvl v
     --
     recordContent lvl = (<> trailingComma) . mconcat . intersperse (comma lvl) . map toElem . Map.toList where
-        toElem (k, v) = fromText k <> string7 ": " <> go lvl v
+        toElem (k, v) = fromText k <> char7 ':' <> go' True lvl v
 
 -- | Can the value be nicely rendered on a single line? True for non-compounds and single-value compounds
 isSimple :: Value -> Bool
