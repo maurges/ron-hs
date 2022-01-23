@@ -13,6 +13,7 @@ import Data.List (intersperse)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, encodeUtf8BuilderEscaped)
 import Data.Word (Word8)
+import Test.QuickCheck (Arbitrary, arbitrary, chooseEnum)
 
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Builder.Prim as Prim
@@ -30,7 +31,7 @@ data CommaStyle
     -- ^ Comma after value, including last element
     | CommaLeading
     -- ^ Haskell style, comma at line start
-    deriving (Eq, Show)
+    deriving (Eq, Show, Bounded, Enum)
 
 data SerializeSettins = SerializeSettins
     { commaStyle :: !CommaStyle
@@ -252,3 +253,18 @@ encodeChar = primBounded escape
         hexEscape = (\c -> ('\\', ('u', fromIntegral . ord $ c))) >$<
             Prim.char8 >*< Prim.char8 >*< word16HexFixed
         unicode2 cs = const cs >$< Prim.charUtf8 >*< Prim.charUtf8
+
+--- QuickCheck
+
+instance Arbitrary CommaStyle where
+    arbitrary = chooseEnum (minBound, maxBound)
+
+instance Arbitrary SerializeSettins where
+    arbitrary = SerializeSettins
+        <$> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
