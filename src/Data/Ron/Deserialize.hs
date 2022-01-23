@@ -1,26 +1,34 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-do-bind #-}
 module Data.Ron.Deserialize
-    ( loads
+    ( decode, decodeLazy, decodeFile
+    , loads, loadsLazy, loadFile, loadFile'
+    , toplevel, value
+    , ParseError, DecodeError
     ) where
 
 import Control.Applicative ((<|>), liftA2)
+import Control.Exception (Exception, throwIO)
 import Data.Attoparsec.ByteString (skip)
 import Data.ByteString.Char8 (ByteString, cons)
 import Data.ByteString.Lazy (toStrict)
 import Data.Char (isAlpha, isAlphaNum, chr)
+import Data.List (intercalate)
 import Data.Map (Map)
+import Data.Ron.Class (FromRon, fromRon)
 import Data.Text (Text, uncons)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
+import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 
 import qualified Data.Map as Map
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Char8 as ByteString8
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
-import Data.Attoparsec.ByteString.Char8 hiding (hexadecimal, decimal, isSpace)
+import Data.Attoparsec.ByteString.Char8 hiding (feed, hexadecimal, decimal, isSpace)
 import Data.Ron.Value
 import Prelude hiding (takeWhile)
 
@@ -41,10 +49,58 @@ import Prelude hiding (takeWhile)
 -- Also, fucking raw strings. Why not just start them with '#'?
 
 
--- | Parse a string to a  'Value'. The error is produced by attoparsec and is
+--- Decode functions
+
+
+-- | Parse a 'ByteString' to your type. The error is produced by attoparsec and is
 -- not very useful.
+decode :: FromRon a => ByteString -> Either String a
+decode str = loads str >>= fromRon
+
+-- | Parse a lazy 'Lazy.ByteString' to your type. The error is produced by
+-- attoparsec and is not very useful.
+decodeLazy :: FromRon a => Lazy.ByteString -> Either String a
+decodeLazy str = loadsLazy str >>= fromRon
+
+-- | Parse file content to your type. Throws 'ParseError' or 'DecodeError' on
+-- errors.
+decodeFile :: FromRon a => FilePath -> IO a
+decodeFile path = loadFile path >>= pure . fromRon >>= \case
+    Left err -> throwIO $! DecodeError err
+    Right x -> pure x
+
+-- | Parse a 'ByteString' to a 'Value'. You probably want 'decode' instead
 loads :: ByteString -> Either String Value
 loads = parseOnly (ws *> toplevel <* endOfInput)
+
+-- | Parse a lazy 'Lazy.ByteString' to a 'Value'. You probably want
+-- 'decodeLazy' instead
+loadsLazy :: Lazy.ByteString -> Either String Value
+loadsLazy str = case Lazy.toChunks str of
+    [] -> Left "Empty input"
+    s:ss -> go ss $! parse toplevel s
+  where
+    -- since toplevel requires eof after end, _rest should always be nothing
+    go _ (Fail _rest contexts message) = Left $
+        "Parse error: " <> message
+        <> "; context: " <> intercalate "; " contexts
+    go [] (Done _rest x) = pure x
+    go _ (Done _rest _x) = Left "Unconsumed input after value"
+    go [] (Partial _) = Left "Unexpected end of input"
+    go (s:ss) (Partial feed) = go ss $! feed s
+
+-- | Parse file. Throws 'ParseError'
+loadFile :: FilePath -> IO Value
+loadFile path = loadFile' path >>= \case
+    Left err -> throwIO $! ParseError err
+    Right x -> pure x
+
+-- | Parse file and return the error in 'Either'
+loadFile' :: FilePath -> IO (Either String Value)
+loadFile' path = loadsLazy <$> Lazy.readFile path
+
+
+--- Parsers
 
 
 -- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
@@ -421,3 +477,18 @@ hexadecimalDigit c = decimalDigit c
 
 skip1 = skip (const True)
 endOr parser = atEnd >>= \case {True -> pure (); False -> parser}
+
+
+--- Exceptions
+
+
+-- | Error parsing 'ByteString' to 'Value'
+newtype ParseError = ParseError String
+    deriving (Show, Typeable)
+
+-- | Error parsing 'Value' to custom type
+newtype DecodeError = DecodeError String
+    deriving (Show, Typeable)
+
+instance Exception ParseError
+instance Exception DecodeError

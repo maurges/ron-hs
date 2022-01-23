@@ -3,17 +3,21 @@ module Data.Ron.Serialize
     ( CommaStyle (..)
     , SerializeSettins (..)
     , haskellStyle, rustStyle, compactStyle
-    , dumps
+    , encode, encodeFile
+    , dumps, dumpFile
+    , ronBuilder
     ) where
 
-import Data.ByteString.Builder (Builder, toLazyByteString, byteString, integerDec, doubleDec, char7, string7)
+import Data.ByteString.Builder (Builder, toLazyByteString, byteString, integerDec, doubleDec, char7, string7, hPutBuilder)
 import Data.ByteString.Builder.Prim (primBounded, condB, (>$<), (>*<), liftFixedToBounded, word16HexFixed)
 import Data.Char (ord)
 import Data.List (intersperse)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, encodeUtf8BuilderEscaped)
+import Data.Ron.Class (ToRon (toRon))
 import Data.Word (Word8)
 import Test.QuickCheck (Arbitrary, arbitrary, chooseEnum)
+import System.IO (openFile, IOMode (WriteMode), hSetBinaryMode, hSetBuffering, BufferMode (BlockBuffering))
 
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Builder.Prim as Prim
@@ -83,8 +87,34 @@ compactStyle = SerializeSettins
     , spaceAfterColon = False
     }
 
+-- | Serialize a value to a lazy bytestring. For settings you can use
+-- 'haskellStyle' or 'rustStyle' or 'compactStyle'
+encode :: ToRon a => SerializeSettins -> a -> Lazy.ByteString
+encode settings = dumps settings . toRon
+
+-- | Serialize a value into a file. For settings you can use
+-- 'haskellStyle' or 'rustStyle' or 'compactStyle'
+encodeFile :: ToRon a => SerializeSettins -> FilePath -> a -> IO ()
+encodeFile settings path = dumpFile settings path . toRon
+
+-- | Serialize a RON value to a lazy bytestring. You probably want to use
+-- 'encode' instead
 dumps :: SerializeSettins -> Value -> Lazy.ByteString
-dumps SerializeSettins {..} = toLazyByteString . toplevel where
+dumps settings = toLazyByteString . ronBuilder settings
+
+-- | Serialize a RON value into a file. You probably want to use 'encodeFile'
+-- instead
+dumpFile :: SerializeSettins -> FilePath -> Value -> IO ()
+dumpFile settings path value = do
+    handle <- openFile path WriteMode
+    -- recommended in builder package
+    hSetBinaryMode handle True
+    hSetBuffering handle $ BlockBuffering Nothing -- hmm
+    hPutBuilder handle $ ronBuilder settings value
+
+-- | The builder producing the serialized representation
+ronBuilder :: SerializeSettins -> Value -> Builder
+ronBuilder SerializeSettins {..} = toplevel where
     deeper !lvl = lvl + indent
     nl  = if indent == 0 then mempty else char7 '\n'
     shift lvl = string7 $ replicate lvl ' '
