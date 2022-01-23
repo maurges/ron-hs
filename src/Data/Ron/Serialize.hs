@@ -64,7 +64,7 @@ rustStyle = SerializeSettins
     , indent = 4
     , singleElementSpecial = True
     , unpackToplevel = False
-    , openBracketOnSameLine = False
+    , openBracketOnSameLine = True
     , closeBracketOnSameLine = False
     }
 compactStyle = SerializeSettins
@@ -83,13 +83,13 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
     shift lvl = string7 $ replicate lvl ' '
     bracketOpen lvl c
         | indent == 0  = char7 c
-        | openBracketOnSameLine  = char7 ' ' <> char7 c <> nl <> shift (deeper lvl)
+        | openBracketOnSameLine  = char7 c <> nl <> shift (deeper lvl)
             <> if commaStyle == CommaLeading
                 then char7 ' ' <> char7 ' '
                 else mempty
         | commaStyle == CommaLeading  =
             nl <> shift (deeper lvl) <> char7 c <> char7 ' '
-        | otherwise  = char7 ' ' <> char7 c <> nl <> shift (deeper lvl)
+        | otherwise  = nl <> shift lvl <> char7 c <> nl <> shift (deeper lvl)
     bracketClose lvl c
         | indent == 0  = char7 c
         | closeBracketOnSameLine  = char7 ' ' <> char7 c
@@ -134,7 +134,7 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
             | otherwise -> bracketOpen lvl '{' <> mapContent (deeper lvl) xs <> bracketClose lvl '}'
         Tuple mbName xs ->
             let
-              name = if Text.null mbName then mempty else fromText mbName
+              name = if Text.null mbName then mempty else fromText mbName <> char7 ' '
               content = if singleElementSpecial && isSimple (Tuple mbName xs)
                     then let !x = Vector.unsafeHead xs
                          in string7 "( " <> go lvl x <> string7 " )"
@@ -142,7 +142,7 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
             in name <> content
         Record mbName xs ->
             let
-              name = if Text.null mbName then mempty else fromText mbName
+              name = if Text.null mbName then mempty else fromText mbName <> char7 ' '
               content = if singleElementSpecial && isSimple (Record mbName xs)
                     then let (!k, !v) = head . Map.toList $ xs
                          in string7 "( " <> fromText k <> string7": " <> go lvl v <> string7 " )"
