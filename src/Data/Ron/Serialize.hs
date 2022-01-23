@@ -116,8 +116,12 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
             -- the previous element
             List xs -> listContent 0 xs
             Record _name xs -> recordContent 0 xs
-            v -> go 0 v
-        else go 0
+            v -> go startIndent v
+        else go startIndent
+        -- special handling for haskell-style: don't indent the topmost block
+        where startIndent = if commaStyle == CommaLeading
+                then negate indent
+                else 0
     --
     go = go' False
     go' !afterColon !lvl = \case
@@ -132,13 +136,17 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
             | null xs -> spc <> string7 "[]"
             | singleElementSpecial && isSimple (List xs)
                 -> let !x = Vector.unsafeHead xs
-                   in spc <> string7 "[ " <> go lvl x <> string7 " ]"
+                       open = if indent /= 0 then string7 "[ " else char7 '['
+                       close = if indent /= 0 then string7 " ]" else char7 ']'
+                   in spc <> open <> go lvl x <> close
             | otherwise -> bracketOpen afterColon lvl '[' <> listContent (deeper lvl) xs <> bracketClose lvl ']'
         Map xs
             | null xs -> spc <> string7 "{}"
             | singleElementSpecial && isSimple (Map xs)
                 -> let (!k, !v) = head . Map.toList $ xs
-                   in spc <> string7 "{ " <> go lvl k <> char7 ':' <> go' True lvl v <> string7 " }"
+                       open = if indent /= 0 then string7 "{ " else char7 '{'
+                       close = if indent /= 0 then string7 " }" else char7 '}'
+                   in spc <> open <> go lvl k <> char7 ':' <> go' True lvl v <> close
             | otherwise -> bracketOpen afterColon lvl '{' <> mapContent (deeper lvl) xs <> bracketClose lvl '}'
         Tuple name xs
             | singleElementSpecial && isSimple (Tuple name xs) ->
@@ -146,7 +154,9 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
                     nameB = if Text.null name
                         then mempty
                         else fromText name <> char7 ' '
-                in spc <> nameB <> string7 "( " <> go lvl x <> string7 " )"
+                    open = if indent /= 0 then string7 "( " else char7 '('
+                    close = if indent /= 0 then string7 " )" else char7 ')'
+                in spc <> nameB <> open <> go lvl x <> close
             | Text.null name ->
                 bracketOpen afterColon lvl '(' <> listContent (deeper lvl) xs <> bracketClose lvl ')'
             | otherwise ->
@@ -157,7 +167,9 @@ dumps SerializeSettins {..} = toLazyByteString . toplevel where
                     nameB = if Text.null name
                         then mempty
                         else fromText name <> char7 ' '
-                in spc <> nameB <> string7 "( " <> fromText k <> char7 ':' <> go' True lvl v <> string7 " )"
+                    open = if indent /= 0 then string7 "( " else char7 '('
+                    close = if indent /= 0 then string7 " )" else char7 ')'
+                in spc <> nameB <> open <> fromText k <> char7 ':' <> go' True lvl v <> close
             | Text.null name ->
                 bracketOpen afterColon lvl '(' <> recordContent (deeper lvl) xs <> bracketClose lvl ')'
             | otherwise ->
