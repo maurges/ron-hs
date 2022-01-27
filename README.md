@@ -84,7 +84,7 @@ datatypes.
     learning.
 - [ ] Generic FromRon and ToRon instances. A good opportunity for me to learn
   ghc generics.
-- [ ] Better serializer with configurable options.
+- [x] Better serializer with configurable options.
 - [x] Maybe switch to bytestring for encoder? The bytestring builder is a lot
   more advanced than text one.
   * Did and the ergonomics are a lot better
@@ -93,7 +93,8 @@ datatypes.
   good as for bytestring.
   * Done. Performance is basically the same, but correctness is improved.
 - [ ] Do I really need Map and Vector? I just copied that part from aeson
-- [ ] See what else good there is in aeson and yank that. Loading from files
+- [x] See what else good there is in aeson and yank that. Loading from files
+  * Looks like everything I ever used is done
   maybe?
 - [ ] Should expose attoparsec's chunk-based parse so that this could be used
   with conduit or pipes.
