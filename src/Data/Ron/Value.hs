@@ -39,7 +39,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- @()@ is represented as @Unit ""@
 --
 -- 'Tuple' and 'Record' contents are not empty when parsed, since the empty
--- contents denote a 'Tuple'
+-- contents denote a 'Unit'
 data Value
     = Integral !Integer
     | Floating !Double
