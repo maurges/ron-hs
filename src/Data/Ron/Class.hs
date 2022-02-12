@@ -7,12 +7,13 @@ module Data.Ron.Class
     ) where
 
 import Control.Arrow ((***))
-import Control.Applicative (liftA2)
+import Control.Applicative (liftA2, (<|>))
+import Data.Map (Map)
 import Data.Text (Text, pack)
+import Data.Vector (Vector)
 import GHC.Generics
-    ( Generic (Rep, to, from), V1, U1 (..), (:+:)(..), (:*:)(..), K1 (..), M1 (..)
+    ( Generic (Rep, from, to), V1, U1 (..), (:+:)(..), (:*:)(..), K1 (..), M1 (..)
     , C, S, D, R
-    , Datatype (datatypeName, moduleName, packageName, isNewtype)
     , Constructor (conName, conIsRecord), Selector (selName)
     )
 
@@ -39,6 +40,8 @@ class ToRon a where
 -- | A class of values that can be from RON format
 class FromRon a where
     fromRon :: Value -> ParseResult a
+    default fromRon :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
+    fromRon = fromRonDefault
 
 instance ToRon Int where
     toRon = Integral . fromIntegral
@@ -182,28 +185,91 @@ instance GToRonProduct U1 where
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
     toRonProduct name xs (M1 x) =
-        let field = selName (undefined :: t s f a)
+        let field = pack $ selName (undefined :: t s f a)
             value = toRonRec x
         in case (field, xs) of
             ("", Left xs') ->
                 let fields = value : xs'
                 in Tuple name $! Vector.fromList fields
             (_field, Right xs') ->
-                let fields = (pack field, value) : xs'
+                let fields = (field, value) : xs'
                 in Record name $! Map.fromList fields
-            other -> error $ "Bad product: " <> show other
+            other -> error $ "Bad product: " <> take 128 (show other)
 
 instance (Selector s, GToRonRec f, GToRonProduct pr) => GToRonProduct (M1 S s f :*: pr) where
     toRonProduct name xs (M1 x :*: y) =
-        let field = selName (undefined :: t s f a)
+        let field = pack $ selName (undefined :: t s f a)
             value = toRonRec x
         in case xs of
             Left xs' ->
                 let fields = value : xs'
                 in toRonProduct name (Left fields) y
             Right xs' ->
-                let fields = (pack field, value) : xs'
+                let fields = (field, value) : xs'
                 in toRonProduct name (Right fields) y
 
 instance ToRon c => GToRonRec (K1 R c) where
     toRonRec (K1 x) = toRon x
+
+
+fromRonDefault :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
+fromRonDefault = fmap to . fromRonG
+
+class GFromRon f where
+    fromRonG :: Value -> ParseResult (f a)
+
+class GFromRonSum f where
+    fromRonSum :: Value -> ParseResult (f a)
+class GFromRonProduct f where
+    fromRonProduct :: Either (Vector Value) (Map Text Value) -> ParseResult (f a)
+class GFromRonRec f where
+    fromRonRec :: Value -> ParseResult (f a)
+
+instance GFromRonSum f => GFromRon (M1 D _d f) where
+    fromRonG x = M1 <$> fromRonSum x
+
+instance (Constructor c, GFromRonProduct f) => GFromRonSum (M1 C c f) where
+    fromRonSum x =
+        let con = undefined :: t c f a
+            name = pack . conName $ con
+        in M1 <$> case x of
+            Unit n | n == name -> fromRonProduct $ Left Vector.empty
+                   | otherwise -> fail "Incorrect name"
+            Tuple n xs | n == name -> fromRonProduct $ Left (Vector.reverse xs)
+                       | otherwise -> fail "Incorrect name"
+            Record n xs | n == name -> fromRonProduct $ Right xs
+                        | otherwise -> fail "Incorrect name"
+            _ -> fail "Incorrect value type"
+
+instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
+    fromRonSum x = (L1 <$> fromRonSum x) <|> (R1 <$> fromRonSum x)
+
+instance GFromRonProduct U1 where
+    fromRonProduct (Left xs) | Vector.null xs  = pure U1
+    fromRonProduct (Right xs) | Map.null xs  = pure U1
+    fromRonProduct _ = fail "Expected empty structure"
+
+instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
+    fromRonProduct xs =
+        let field = pack $ selName (undefined :: t s f a)
+        in case (field, xs) of
+            ("", Left xs') -> case Vector.uncons xs' of
+                Nothing -> fail "Not enough elements in tuple"
+                Just (x, _) -> M1 <$> fromRonRec x
+            (_field, Right xs') -> case Map.lookup field xs' of
+                Nothing -> fail "Field not present in record"
+                Just x -> M1 <$> fromRonRec x
+            other -> error $ "Bad Product: " <> take 128 (show other)
+
+instance (Selector s, GFromRonRec f, GFromRonProduct pr) => GFromRonProduct (M1 S s f :*: pr) where
+    fromRonProduct (Left xs) = case Vector.uncons xs of
+        Nothing -> fail "Not enough elements in tuple"
+        Just (x, xs') -> (:*:)
+            <$> fromRonProduct (Left $ Vector.singleton x)
+            <*> fromRonProduct (Left xs')
+    fromRonProduct xs = (:*:)
+        <$> fromRonProduct xs
+        <*> fromRonProduct xs
+
+instance FromRon c => GFromRonRec (K1 R c) where
+    fromRonRec x = K1 <$> fromRon x
