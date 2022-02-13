@@ -15,6 +15,7 @@ import Data.Char (isAlpha, isAlphaNum, chr)
 import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Ron.Class (FromRon, fromRon)
+import Data.Scientific (Scientific, scientific)
 import Data.Text (Text, uncons)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Typeable (Typeable)
@@ -28,7 +29,7 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
-import Data.Attoparsec.ByteString.Char8 hiding (feed, hexadecimal, decimal, isSpace)
+import Data.Attoparsec.ByteString.Char8 hiding (feed, hexadecimal, decimal, isSpace, scientific)
 import Data.Ron.Value
 import Prelude hiding (takeWhile)
 
@@ -234,7 +235,7 @@ octal positive
 binary positive
     = buildNumber 2 positive <$> takeWhile (\c -> c == '_' || binaryDigit c) <* ws
 
-floating :: Bool -> ByteString -> Parser Double
+floating :: Bool -> ByteString -> Parser Scientific
 floating positive !wholeStr = do
     -- dot is already skipped
     !fracStr <- takeWhile (\c -> c == '_' || decimalDigit c)
@@ -245,7 +246,7 @@ floating positive !wholeStr = do
     let !mantissa = wholePart * 10^shift + fracPart
     let !power = e - shift
     ws
-    pure $! mantissa * 10^^power
+    pure $! scientific mantissa (fromIntegral power)
     where
         decimal' = anyChar >>= \case
             '+' -> decimal True

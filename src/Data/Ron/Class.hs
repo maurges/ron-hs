@@ -11,10 +11,10 @@ import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Map (Map)
 import Data.Proxy (Proxy (..))
 import Data.Ron.Class.Internal (productSize, ProductSize)
+import Data.Scientific (fromFloatDigits, toRealFloat, Scientific)
 import Data.Text (Text, pack)
 import Data.Vector (Vector)
 import Data.Word (Word8, Word16, Word32, Word64)
-import GHC.Float (float2Double, double2Float)
 import GHC.Generics
     ( Generic (Rep, from, to), V1, U1 (..), (:+:)(..), (:*:)(..), K1 (..), M1 (..)
     , C, S, D, R
@@ -103,15 +103,20 @@ instance FromRon Integer where
     fromRon (Integral i) = pure i
     fromRon _ = fail "Not an integer"
 
-instance ToRon Double where
+instance ToRon Scientific where
     toRon = Floating
-instance FromRon Double where
+instance FromRon Scientific where
     fromRon (Floating x) = pure x
     fromRon _ = fail "Not a floating"
+instance ToRon Double where
+    toRon = Floating . fromFloatDigits
+instance FromRon Double where
+    fromRon (Floating x) = pure . toRealFloat $ x
+    fromRon _ = fail "Not a floating"
 instance ToRon Float where
-    toRon = Floating . float2Double
+    toRon = Floating . fromFloatDigits
 instance FromRon Float where
-    fromRon (Floating x) = pure . double2Float $ x
+    fromRon (Floating x) = pure . toRealFloat $ x
     fromRon _ = fail "Not a floating"
 
 instance ToRon Char where
@@ -155,10 +160,9 @@ instance (FromRon k, FromRon v, Ord k) => FromRon (Map.Map k v) where
     fromRon _ = fail "Not a map"
 
 instance ToRon () where
-    toRon () = Unit "()"
+    toRon () = Unit ""
 instance FromRon () where
     fromRon (Unit name)
-        | name == "()" = pure ()
         | name == ""   = pure ()
         | otherwise    = fail "Not a unit enum value"
     fromRon _ = fail "Not a unit"

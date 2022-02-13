@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE CPP #-}
 
 #if __GLASGOW_HASKELL__ >= 800
@@ -18,6 +19,7 @@ import Data.Hashable (Hashable, hashWithSalt)
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Data.Scientific (Scientific, fromFloatDigits)
 import Data.Vector (Vector)
 import Test.QuickCheck (sized, Arbitrary, arbitrary, Gen, oneof, shuffle, choose, elements, listOf)
 
@@ -42,7 +44,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- contents denote a 'Unit'
 data Value
     = Integral !Integer
-    | Floating !Double
+    | Floating !Scientific
     | Char     !Char
     | String   !Text
     | List     !(Vector Value)
@@ -121,7 +123,7 @@ arbValue' allowFloat size
         , Char <$> arbitrary
         , String <$> arbText
         , Unit <$> arbIdentifier
-        ] <> if allowFloat then [Floating <$> arbitrary] else []
+        ] <> if allowFloat then [Floating . fromFloatDigits <$> arbitrary @Double] else []
     | otherwise = oneof
         [ List <$> arbList size
         , Map <$> arbMap size

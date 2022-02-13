@@ -8,8 +8,9 @@ module Data.Ron.Serialize
     , ronBuilder
     ) where
 
-import Data.ByteString.Builder (Builder, toLazyByteString, byteString, integerDec, doubleDec, char7, string7, hPutBuilder)
+import Data.ByteString.Builder (Builder, toLazyByteString, byteString, integerDec, char7, string7, hPutBuilder)
 import Data.ByteString.Builder.Prim (primBounded, condB, (>$<), (>*<), liftFixedToBounded, word16HexFixed)
+import Data.ByteString.Builder.Scientific (scientificBuilder)
 import Data.Char (ord)
 import Data.List (intersperse)
 import Data.Text (Text)
@@ -157,7 +158,7 @@ ronBuilder SerializeSettins {..} = toplevel where
     go = go' False
     go' !afterColon !lvl = \case
         Integral x -> spc <> integerDec x
-        Floating x -> spc <> doubleDec x
+        Floating x -> spc <> scientificBuilder x
         Char x -> spc <> char7 '\'' <> encodeChar x <> char7 '\''
         String x -> spc <> char7 '"' <> encodeString x <> char7 '"'
         Unit name -> spc <> if Text.null name

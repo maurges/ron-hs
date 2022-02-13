@@ -25,6 +25,7 @@ library:
   - bytestring
   - containers
   - hashable
+  - scientific
   - template-haskell
   - text
   - vector
