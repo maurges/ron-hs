@@ -1,6 +1,5 @@
 {-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances, EmptyCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeApplications #-}
 module Data.Ron.Class
     ( ToRon (..), FromRon (..)
     , ParseResult
@@ -8,9 +7,14 @@ module Data.Ron.Class
 
 import Control.Arrow ((***))
 import Control.Applicative (liftA2, (<|>))
+import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Map (Map)
+import Data.Proxy (Proxy (..))
+import Data.Ron.Class.Internal (productSize, ProductSize)
 import Data.Text (Text, pack)
 import Data.Vector (Vector)
+import Data.Word (Word8, Word16, Word32, Word64)
+import GHC.Float (float2Double, double2Float)
 import GHC.Generics
     ( Generic (Rep, from, to), V1, U1 (..), (:+:)(..), (:*:)(..), K1 (..), M1 (..)
     , C, S, D, R
@@ -48,6 +52,51 @@ instance ToRon Int where
 instance FromRon Int where
     fromRon (Integral i) = pure . fromIntegral $ i
     fromRon _ = fail "Not an integer"
+instance ToRon Int8 where
+    toRon = Integral . fromIntegral
+instance FromRon Int8 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Int16 where
+    toRon = Integral . fromIntegral
+instance FromRon Int16 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Int32 where
+    toRon = Integral . fromIntegral
+instance FromRon Int32 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Int64 where
+    toRon = Integral . fromIntegral
+instance FromRon Int64 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Word where
+    toRon = Integral . fromIntegral
+instance FromRon Word where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Word8 where
+    toRon = Integral . fromIntegral
+instance FromRon Word8 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Word16 where
+    toRon = Integral . fromIntegral
+instance FromRon Word16 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Word32 where
+    toRon = Integral . fromIntegral
+instance FromRon Word32 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
+instance ToRon Word64 where
+    toRon = Integral . fromIntegral
+instance FromRon Word64 where
+    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon _ = fail "Not an integer"
 instance ToRon Integer where
     toRon = Integral
 instance FromRon Integer where
@@ -58,6 +107,11 @@ instance ToRon Double where
     toRon = Floating
 instance FromRon Double where
     fromRon (Floating x) = pure x
+    fromRon _ = fail "Not a floating"
+instance ToRon Float where
+    toRon = Floating . float2Double
+instance FromRon Float where
+    fromRon (Floating x) = pure . double2Float $ x
     fromRon _ = fail "Not a floating"
 
 instance ToRon Char where
@@ -157,7 +211,7 @@ class GToRon f where
 class GToRonSum f where
     toRonSum :: f a -> Value
 class GToRonProduct f where
-    toRonProduct :: Text -> Either [Value] [(Text, Value)] -> f a -> Value
+    toRonProduct :: f a -> Either (Vector Value) (Map Text Value)
 class GToRonRec f where
     toRonRec :: f a -> Value
 
@@ -171,42 +225,34 @@ instance (Constructor c, GToRonProduct f) => GToRonSum (M1 C c f) where
     toRonSum (M1 x) =
         let con = undefined :: t c f a
             name = pack . conName $ con
-            nil = if conIsRecord con
-                then Right []
-                else Left []
-        in toRonProduct name nil x
+            xs = toRonProduct x
+        in case (xs, conIsRecord con) of
+            (Right xs', True) -> Record name xs'
+            (Left xs', False) -> Tuple name xs'
+            (Right xs', _) | null xs' -> Unit name
+            (Left xs', _) | Vector.null xs' -> Unit name
+            _ -> error $ "Bad product: " <> take 128 (show xs)
 
 instance (GToRonSum fl, GToRonSum fr) => GToRonSum (fl :+: fr) where
     toRonSum (L1 x) = toRonSum x
     toRonSum (R1 x) = toRonSum x
 
 instance GToRonProduct U1 where
-    toRonProduct name _ U1 = Unit name
+    toRonProduct U1 = Left Vector.empty
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
-    toRonProduct name xs (M1 x) =
+    toRonProduct (M1 x) =
         let field = pack $ selName (undefined :: t s f a)
             value = toRonRec x
-        in case (field, xs) of
-            ("", Left xs') ->
-                let fields = value : xs'
-                in Tuple name $! Vector.fromList fields
-            (_field, Right xs') ->
-                let fields = (field, value) : xs'
-                in Record name $! Map.fromList fields
-            other -> error $ "Bad product: " <> take 128 (show other)
+        in case field of
+            "" -> Left . Vector.singleton $ value
+            _field -> Right $ Map.singleton field value
 
-instance (Selector s, GToRonRec f, GToRonProduct pr) => GToRonProduct (M1 S s f :*: pr) where
-    toRonProduct name xs (M1 x :*: y) =
-        let field = pack $ selName (undefined :: t s f a)
-            value = toRonRec x
-        in case xs of
-            Left xs' ->
-                let fields = value : xs'
-                in toRonProduct name (Left fields) y
-            Right xs' ->
-                let fields = (field, value) : xs'
-                in toRonProduct name (Right fields) y
+instance (GToRonProduct pl, GToRonProduct pr) => GToRonProduct (pl :*: pr) where
+    toRonProduct (x :*: y) = case (toRonProduct x, toRonProduct y) of
+        (Left xs, Left ys) -> Left $ xs <> ys
+        (Right xs, Right ys) -> Right $ Map.union xs ys
+        _ -> error "Incompatible product branches"
 
 instance ToRon c => GToRonRec (K1 R c) where
     toRonRec (K1 x) = toRon x
@@ -235,7 +281,7 @@ instance (Constructor c, GFromRonProduct f) => GFromRonSum (M1 C c f) where
         in M1 <$> case x of
             Unit n | n == name -> fromRonProduct $ Left Vector.empty
                    | otherwise -> fail "Incorrect name"
-            Tuple n xs | n == name -> fromRonProduct $ Left (Vector.reverse xs)
+            Tuple n xs | n == name -> fromRonProduct $ Left xs
                        | otherwise -> fail "Incorrect name"
             Record n xs | n == name -> fromRonProduct $ Right xs
                         | otherwise -> fail "Incorrect name"
@@ -252,21 +298,22 @@ instance GFromRonProduct U1 where
 instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
     fromRonProduct xs =
         let field = pack $ selName (undefined :: t s f a)
-        in case (field, xs) of
-            ("", Left xs') -> case Vector.uncons xs' of
+        in case xs of
+            Left xs' -> case Vector.uncons xs' of
                 Nothing -> fail "Not enough elements in tuple"
-                Just (x, _) -> M1 <$> fromRonRec x
-            (_field, Right xs') -> case Map.lookup field xs' of
+                Just (x, xs'') | Vector.null xs'' -> M1 <$> fromRonRec x
+                               | otherwise -> fail "Trailing members in tuple"
+            Right xs' -> case Map.lookup field xs' of
                 Nothing -> fail "Field not present in record"
                 Just x -> M1 <$> fromRonRec x
-            other -> error $ "Bad Product: " <> take 128 (show other)
 
-instance (Selector s, GFromRonRec f, GFromRonProduct pr) => GFromRonProduct (M1 S s f :*: pr) where
-    fromRonProduct (Left xs) = case Vector.uncons xs of
-        Nothing -> fail "Not enough elements in tuple"
-        Just (x, xs') -> (:*:)
-            <$> fromRonProduct (Left $ Vector.singleton x)
-            <*> fromRonProduct (Left xs')
+instance (ProductSize pl, GFromRonProduct pl, GFromRonProduct pr) => GFromRonProduct (pl :*: pr) where
+    fromRonProduct (Left xs) =
+        let sizel = productSize (Proxy @pl)
+            (xsl, xsr) = Vector.splitAt sizel xs
+        in (:*:)
+            <$> fromRonProduct (Left xsl)
+            <*> fromRonProduct (Left xsr)
     fromRonProduct xs = (:*:)
         <$> fromRonProduct xs
         <*> fromRonProduct xs

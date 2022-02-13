@@ -7,10 +7,16 @@ import Data.Ron.Value.Internal (similar')
 import Test.Tasty.QuickCheck (testProperty)
 
 import ForExample (exampleTests)
+import Generic (genericsTests)
 
 import Test.Tasty
 
-main = defaultMain $ testGroup "properties" [always_decodes, loads_dumps, exampleTests]
+main = defaultMain $ testGroup "properties"
+    [ always_decodes
+    , loads_dumps
+    , exampleTests
+    , genericsTests
+    ]
 
 always_decodes = testProperty "isRight . loads . dumps arbStyle $ x" $
     \style value -> case loads . toStrict . dumps style $ value of

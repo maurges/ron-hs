@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedLists #-}
-module ForExample where
+module ForExample
+    ( exampleTests
+    ) where
 
 import Data.Ron.Deserialize (loads)
 import Data.Ron.Value (Value (..))
 import Data.ByteString.Char8 (ByteString, unlines)
+import Data.Text.Encoding (encodeUtf8)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty (testGroup)
-import Data.Text.Encoding (encodeUtf8)
 
 import Prelude hiding (unlines)
 
