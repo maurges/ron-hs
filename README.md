@@ -82,7 +82,7 @@ datatypes.
   * Preliminary benchmarks show it's slightly worse than aeson, and a lot worse
     than rust. I really don't known how to profile, so this needs more
     learning.
-- [ ] Generic FromRon and ToRon instances. A good opportunity for me to learn
+- [x] Generic FromRon and ToRon instances. A good opportunity for me to learn
   ghc generics.
 - [x] Better serializer with configurable options.
 - [x] Maybe switch to bytestring for encoder? The bytestring builder is a lot
@@ -94,7 +94,9 @@ datatypes.
   * Done. Performance is basically the same, but correctness is improved.
 - [ ] Do I really need Map and Vector? I just copied that part from aeson
 - [x] See what else good there is in aeson and yank that. Loading from files
-  * Looks like everything I ever used is done
   maybe?
-- [ ] Should expose attoparsec's chunk-based parse so that this could be used
+  * Looks like everything I ever used is done
+- [x] Should expose attoparsec's chunk-based parse so that this could be used
   with conduit or pipes.
+- [ ] Allow for generic deriving to have options with DerivingVia. Can
+  implement the ron-rs's pragmas this way.
