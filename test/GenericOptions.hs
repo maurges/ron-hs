@@ -68,6 +68,14 @@ encodeOptionalFieldsTests = testGroup "optional field encoding"
 decodeOptionalFieldsTests = testGroup "optional field decoding"
     [ testCase "all none" $
         Right maybeFieldsNone @=? dec maybeFieldsNoneRon
+    , testCase "all none as None" $
+        Right maybeFieldsNone @=? dec (Record "MaybeFields"
+            [ ("f1", Integral 1)
+            , ("f2", Unit "None")
+            , ("f3", Unit "None")
+            , ("rec", Unit "None")
+            ]
+        )
     , testCase "all present" $
         Right maybeFieldsSome @=? dec maybeFieldsSomeRon
     , testCase "all present as Some" $

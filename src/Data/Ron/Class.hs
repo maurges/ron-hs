@@ -380,7 +380,10 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
             Right xs'
                 | decodeImplicitSome conf -> case Map.lookup field xs' of
                     Nothing -> pure . M1 . K1 $ Nothing
-                    Just x -> M1 . K1 . Just <$> fromRon x
+                    Just x -> 
+                        let unwrapped = M1 . K1 . Just <$> fromRon x
+                            wrapped = M1 <$> fromRonRec conf x
+                        in unwrapped <<|>> wrapped
                 | otherwise -> case Map.lookup field xs' of
                     Nothing -> fail "Field not present in record"
                     Just x -> M1 <$> fromRonRec conf x
