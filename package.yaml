@@ -42,6 +42,8 @@ tests:
     - QuickCheck
     - bytestring
     - containers
+    - optics-core
+    - optics-th
     - tasty
     - tasty-hunit
     - tasty-quickcheck

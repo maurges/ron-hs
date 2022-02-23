@@ -54,6 +54,7 @@ test-suite test
       ForExample
       Generic
       GenericOptions
+      Optics.Ron.Settings
       Paths_ron_hs
   hs-source-dirs:
       test
@@ -71,6 +72,8 @@ test-suite test
     , base
     , bytestring
     , containers
+    , optics-core
+    , optics-th
     , ron-hs
     , tasty
     , tasty-hunit

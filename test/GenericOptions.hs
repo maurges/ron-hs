@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric, OverloadedLists #-}
+{-# LANGUAGE OverloadedLabels #-}
 module GenericOptions
     ( genericOptionsTests
     ) where
@@ -6,10 +7,15 @@ module GenericOptions
 import GHC.Generics (Generic)
 import Data.Map (Map)
 import Data.Ron.Class (ToRon, FromRon, toRonGeneric, fromRonGeneric, RonSettings (..), strictRonSettings)
+import Data.Function ((&))
 import Data.Ron.Value (Value (..))
 import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Word (Word8)
+import Optics.Label ()
+import Optics.Ron.Settings ()
+import Optics.Operators ((.~))
+import Optics.Optic ((%))
 import Test.Tasty.HUnit (testCase, (@?=), (@=?))
 import Test.Tasty (testGroup)
 
@@ -63,7 +69,10 @@ encodeOptionalFieldsTests = testGroup "optional field encoding"
     , testCase "all present" $
         enc maybeFieldsSome @?= maybeFieldsSomeRon
     ]
-    where enc = toRonGeneric strictRonSettings { encodeImplicitSome = True }
+    where
+        enc = toRonGeneric settings
+        settings = strictRonSettings &
+            #encodeFlags % #implicitSome .~ True
 
 decodeOptionalFieldsTests = testGroup "optional field decoding"
     [ testCase "all none" $
@@ -93,7 +102,10 @@ decodeOptionalFieldsTests = testGroup "optional field decoding"
             ]
         )
     ]
-    where dec = fromRonGeneric strictRonSettings { decodeImplicitSome = True }
+    where
+        dec = fromRonGeneric settings
+        settings = strictRonSettings &
+            #decodeFlags % #implicitSome .~ True
 
 data MaybeTuple = MaybeTuple
     Int
@@ -141,7 +153,10 @@ encodeOptionalTupleFieldsTests = testGroup "optional fields in tuple encoding"
     , testCase "all present" $
         enc maybeTupleSome @?= maybeTupleSomeRon
     ]
-    where enc = toRonGeneric strictRonSettings { encodeImplicitSome = True }
+    where
+        enc = toRonGeneric settings
+        settings = strictRonSettings &
+            #encodeFlags % #implicitSome .~ True
 
 decodeOptionalTupleFieldsTests = testGroup "optional field in tuple decoding"
     [ testCase "all none" $
@@ -162,11 +177,36 @@ decodeOptionalTupleFieldsTests = testGroup "optional field in tuple decoding"
             ]
         )
     ]
-    where dec = fromRonGeneric strictRonSettings { decodeImplicitSome = True }
+    where
+        dec = fromRonGeneric settings
+        settings = strictRonSettings &
+            #decodeFlags % #implicitSome .~ True
+
+singleConstructorTests = testGroup "omitting single constructor"
+    [ testCase "record encoding" $
+        toRonGeneric se maybeFieldsNone @?= Record "" [ ("f1", Integral 1) ]
+    , testCase "tuple encoding" $
+        toRonGeneric se maybeTupleNone @?= Tuple ""
+            [ Integral 1, Unit "None", Unit "None", Unit "None" ]
+    , testCase "record decoding" $
+        Right maybeFieldsNone @=? fromRonGeneric sd
+            (Record "" [ ("f1", Integral 1) ])
+    , testCase "tuple decoding" $
+        Right maybeTupleNone @=? fromRonGeneric sd
+            (Tuple "" [ Integral 1, Unit "None", Unit "None", Unit "None" ])
+    ]
+    where
+        se = strictRonSettings
+            & ( #encodeFlags % #skipSingleConstructor .~ True )
+            . ( #encodeFlags % #implicitSome .~ True )
+        sd = strictRonSettings
+            & ( #decodeFlags % #skipSingleConstructor .~ True )
+            . ( #decodeFlags % #implicitSome .~ True )
 
 genericOptionsTests = testGroup "generic options"
     [ encodeOptionalFieldsTests
     , decodeOptionalFieldsTests
     , encodeOptionalTupleFieldsTests
     , decodeOptionalTupleFieldsTests
+    , singleConstructorTests
     ]
