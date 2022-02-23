@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists #-}
 module Generic
     ( genericsTests
     ) where

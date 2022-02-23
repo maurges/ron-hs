@@ -3,10 +3,14 @@
 module Data.Ron.Class
     ( ToRon (..), FromRon (..)
     , ParseResult
+    , toRonGeneric
+    , fromRonGeneric
+    , RonSettings (..)
+    , strictRonSettings
     ) where
 
 import Control.Arrow ((***))
-import Control.Applicative (liftA2, (<|>))
+import Control.Applicative (liftA2)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Map (Map)
 import Data.Proxy (Proxy (..))
@@ -22,6 +26,7 @@ import GHC.Generics
     )
 
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value
@@ -34,6 +39,14 @@ import Prelude hiding (fail)
 type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
+
+-- | Like '(<|>)' but collect errors from both sides
+(<<|>>) :: ParseResult a -> ParseResult a -> ParseResult a
+pa <<|>> pb = case pa of
+    Right a -> pure a
+    Left ea -> case pb of
+        Right b -> pure b
+        Left eb -> fail $ ea <> "; "<> eb
 
 -- | A class of values that can be encoded to RON format
 class ToRon a where
@@ -206,30 +219,53 @@ instance (FromRon a1, FromRon a2) => FromRon (a1, a2) where
 
 --- Generic instance
 
+-- | Settings for use with 'Generic' RON encoding/decoding
+data RonSettings = RonSettings
+    { fieldModifier :: !(Text -> Text)
+    -- ^ Field renamer in RON representation
+    , decodeImplicitSome :: !Bool
+    -- ^ Like ron-rs's @implicit_some@: replace missing 'Maybe' fields with
+    -- Nothing when decoding
+    , encodeImplicitSome :: !Bool
+    -- ^ Like ron-rs's @implicit_some@: replace 'Nothing' fields with nothing
+    -- when encoding
+    }
+
+-- | Encode ron using 'Generic' instance and provided 'RonSettings'
+toRonGeneric :: (Generic a, GToRon (Rep a)) => RonSettings -> a -> Value
+toRonGeneric conf = toRonG conf . from
+
+strictRonSettings :: RonSettings
+strictRonSettings = RonSettings
+    { fieldModifier = id
+    , decodeImplicitSome = False
+    , encodeImplicitSome = False
+    }
+
 toRonDefault :: (Generic a, GToRon (Rep a)) => a -> Value
-toRonDefault = toRonG . from
+toRonDefault = toRonGeneric strictRonSettings
 
 class GToRon f where
-    toRonG :: f a -> Value
+    toRonG :: RonSettings -> f a -> Value
 
 class GToRonSum f where
-    toRonSum :: f a -> Value
+    toRonSum :: RonSettings -> f a -> Value
 class GToRonProduct f where
-    toRonProduct :: f a -> Either (Vector Value) (Map Text Value)
+    toRonProduct :: RonSettings -> f a -> Either (Vector Value) (Map Text Value)
 class GToRonRec f where
-    toRonRec :: f a -> Value
+    toRonRec :: RonSettings -> f a -> Value
 
 instance GToRonSum f => GToRon (M1 D _d f) where
-    toRonG (M1 x) = toRonSum x
+    toRonG conf (M1 x) = toRonSum conf x
 
 instance GToRonSum V1 where
-    toRonSum x = case x of {}
+    toRonSum _ x = case x of {}
 
 instance (Constructor c, GToRonProduct f) => GToRonSum (M1 C c f) where
-    toRonSum (M1 x) =
+    toRonSum conf (M1 x) =
         let con = undefined :: t c f a
             name = pack . conName $ con
-            xs = toRonProduct x
+            xs = toRonProduct conf x
         in case (xs, conIsRecord con) of
             (Right xs', True) -> Record name xs'
             (Left xs', False) -> Tuple name xs'
@@ -238,89 +274,139 @@ instance (Constructor c, GToRonProduct f) => GToRonSum (M1 C c f) where
             _ -> error $ "Bad product: " <> take 128 (show xs)
 
 instance (GToRonSum fl, GToRonSum fr) => GToRonSum (fl :+: fr) where
-    toRonSum (L1 x) = toRonSum x
-    toRonSum (R1 x) = toRonSum x
+    toRonSum conf (L1 x) = toRonSum conf x
+    toRonSum conf (R1 x) = toRonSum conf x
 
 instance GToRonProduct U1 where
-    toRonProduct U1 = Left Vector.empty
+    toRonProduct _ U1 = Left Vector.empty
+
+instance {-# OVERLAPPING #-} (Selector s, ToRon c)
+    => GToRonProduct (M1 S s (K1 R (Maybe c))) where
+    toRonProduct conf (M1 (K1 x)) =
+        let field = pack $ selName (undefined :: t s (K1 R (Maybe c)) a)
+        in case x of
+            Nothing | encodeImplicitSome conf ->
+                if Text.null field
+                    then Left . Vector.singleton . toRon $ Nothing @()
+                    else Right Map.empty
+            Just x' | encodeImplicitSome conf ->
+                if Text.null field
+                    then Left . Vector.singleton . toRon $ x'
+                    else
+                        let field' = fieldModifier conf field
+                            value = toRon x'
+                        in Right $ Map.singleton field' value
+            x'
+                | Text.null field -> Left . Vector.singleton . toRon $ x'
+                | otherwise ->
+                    let field' = fieldModifier conf field
+                    in Right . Map.singleton field' $ toRon x'
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
-    toRonProduct (M1 x) =
+    toRonProduct conf (M1 x) =
         let field = pack $ selName (undefined :: t s f a)
-            value = toRonRec x
+            value = toRonRec conf x
         in case field of
             "" -> Left . Vector.singleton $ value
-            _field -> Right $ Map.singleton field value
+            _field ->
+                let field' = fieldModifier conf field
+                in Right $ Map.singleton field' value
 
 instance (GToRonProduct pl, GToRonProduct pr) => GToRonProduct (pl :*: pr) where
-    toRonProduct (x :*: y) = case (toRonProduct x, toRonProduct y) of
+    toRonProduct conf (x :*: y) = case (toRonProduct conf x, toRonProduct conf y) of
         (Left xs, Left ys) -> Left $ xs <> ys
         (Right xs, Right ys) -> Right $ Map.union xs ys
         _ -> error "Incompatible product branches"
 
 instance ToRon c => GToRonRec (K1 R c) where
-    toRonRec (K1 x) = toRon x
+    toRonRec _ (K1 x) = toRon x
 
+
+-- | Decode ron using 'Generic' instance and provided 'RonSettings'
+fromRonGeneric :: (Generic a, GFromRon (Rep a)) => RonSettings -> Value -> ParseResult a
+fromRonGeneric conf = fmap to . fromRonG conf
 
 fromRonDefault :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
-fromRonDefault = fmap to . fromRonG
+fromRonDefault = fromRonGeneric strictRonSettings
 
 class GFromRon f where
-    fromRonG :: Value -> ParseResult (f a)
+    fromRonG :: RonSettings -> Value -> ParseResult (f a)
 
 class GFromRonSum f where
-    fromRonSum :: Value -> ParseResult (f a)
+    fromRonSum :: RonSettings -> Value -> ParseResult (f a)
 class GFromRonProduct f where
-    fromRonProduct :: Either (Vector Value) (Map Text Value) -> ParseResult (f a)
+    fromRonProduct :: RonSettings -> Either (Vector Value) (Map Text Value) -> ParseResult (f a)
 class GFromRonRec f where
-    fromRonRec :: Value -> ParseResult (f a)
+    fromRonRec :: RonSettings -> Value -> ParseResult (f a)
 
 instance GFromRonSum f => GFromRon (M1 D _d f) where
-    fromRonG x = M1 <$> fromRonSum x
+    fromRonG conf x = M1 <$> fromRonSum conf x
 
 instance (Constructor c, GFromRonProduct f) => GFromRonSum (M1 C c f) where
-    fromRonSum x =
+    fromRonSum conf x =
         let con = undefined :: t c f a
             name = pack . conName $ con
         in M1 <$> case x of
-            Unit n | n == name -> fromRonProduct $ Left Vector.empty
+            Unit n | n == name -> fromRonProduct conf $ Left Vector.empty
                    | otherwise -> fail "Incorrect name"
-            Tuple n xs | n == name -> fromRonProduct $ Left xs
+            Tuple n xs | n == name -> fromRonProduct conf $ Left xs
                        | otherwise -> fail "Incorrect name"
-            Record n xs | n == name -> fromRonProduct $ Right xs
+            Record n xs | n == name -> fromRonProduct conf $ Right xs
                         | otherwise -> fail "Incorrect name"
             _ -> fail "Incorrect value type"
 
 instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
-    fromRonSum x = (L1 <$> fromRonSum x) <|> (R1 <$> fromRonSum x)
+    fromRonSum conf x = (L1 <$> fromRonSum conf x) <<|>> (R1 <$> fromRonSum conf x)
 
 instance GFromRonProduct U1 where
-    fromRonProduct (Left xs) | Vector.null xs  = pure U1
-    fromRonProduct (Right xs) | Map.null xs  = pure U1
-    fromRonProduct _ = fail "Expected empty structure"
+    fromRonProduct _ (Left xs) | Vector.null xs  = pure U1
+    fromRonProduct _ (Right xs) | Map.null xs  = pure U1
+    fromRonProduct _ _ = fail "Expected empty structure"
 
-instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
-    fromRonProduct xs =
-        let field = pack $ selName (undefined :: t s f a)
+instance {-# OVERLAPPING #-} (Selector s, FromRon c)
+    => GFromRonProduct (M1 S s (K1 R (Maybe c))) where
+    fromRonProduct conf xs =
+        let field = fieldModifier conf . pack $ selName (undefined :: t s (K1 R (Maybe c)) a)
         in case xs of
             Left xs' -> case Vector.uncons xs' of
                 Nothing -> fail "Not enough elements in tuple"
-                Just (x, xs'') | Vector.null xs'' -> M1 <$> fromRonRec x
+                Just (x, xs'')
+                    | Vector.null xs'' -> M1 <$>
+                        let tryUnwrapped
+                                | decodeImplicitSome conf = K1 . Just <$> fromRon x
+                                | otherwise = fail "Not using decodeImplicitSome"
+                        in tryUnwrapped <<|>> fromRonRec conf x
+                    | otherwise -> fail "Trailing members in tuple"
+            Right xs'
+                | decodeImplicitSome conf -> case Map.lookup field xs' of
+                    Nothing -> pure . M1 . K1 $ Nothing
+                    Just x -> M1 . K1 . Just <$> fromRon x
+                | otherwise -> case Map.lookup field xs' of
+                    Nothing -> fail "Field not present in record"
+                    Just x -> M1 <$> fromRonRec conf x
+
+instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
+    fromRonProduct conf xs =
+        let field = fieldModifier conf . pack $ selName (undefined :: t s f a)
+        in case xs of
+            Left xs' -> case Vector.uncons xs' of
+                Nothing -> fail "Not enough elements in tuple"
+                Just (x, xs'') | Vector.null xs'' -> M1 <$> fromRonRec conf x
                                | otherwise -> fail "Trailing members in tuple"
             Right xs' -> case Map.lookup field xs' of
                 Nothing -> fail "Field not present in record"
-                Just x -> M1 <$> fromRonRec x
+                Just x -> M1 <$> fromRonRec conf x
 
 instance (ProductSize pl, GFromRonProduct pl, GFromRonProduct pr) => GFromRonProduct (pl :*: pr) where
-    fromRonProduct (Left xs) =
+    fromRonProduct conf (Left xs) =
         let sizel = productSize (Proxy @pl)
             (xsl, xsr) = Vector.splitAt sizel xs
         in (:*:)
-            <$> fromRonProduct (Left xsl)
-            <*> fromRonProduct (Left xsr)
-    fromRonProduct xs = (:*:)
-        <$> fromRonProduct xs
-        <*> fromRonProduct xs
+            <$> fromRonProduct conf (Left xsl)
+            <*> fromRonProduct conf (Left xsr)
+    fromRonProduct conf xs = (:*:)
+        <$> fromRonProduct conf xs
+        <*> fromRonProduct conf xs
 
 instance FromRon c => GFromRonRec (K1 R c) where
-    fromRonRec x = K1 <$> fromRon x
+    fromRonRec _ x = K1 <$> fromRon x

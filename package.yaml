@@ -10,12 +10,13 @@ ghc-options:
 - -Werror=incomplete-patterns
 
 default-extensions:
-- LambdaCase
-- OverloadedStrings
-- MultiWayIf
 - BangPatterns
-- TypeOperators
+- LambdaCase
+- MultiWayIf
+- NamedFieldPuns
+- OverloadedStrings
 - ScopedTypeVariables
+- TypeOperators
 
 library:
   source-dirs:         src
@@ -47,6 +48,8 @@ tests:
     - text
     - vector
     ghc-options:
+    - -Wno-all -Wdefault
+    - -Wincomplete-patterns -Werror=incomplete-patterns
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

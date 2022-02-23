@@ -8,6 +8,7 @@ import Test.Tasty.QuickCheck (testProperty)
 
 import ForExample (exampleTests)
 import Generic (genericsTests)
+import GenericOptions (genericOptionsTests)
 
 import Test.Tasty
 
@@ -16,6 +17,7 @@ main = defaultMain $ testGroup "properties"
     , loads_dumps
     , exampleTests
     , genericsTests
+    , genericOptionsTests
     ]
 
 always_decodes = testProperty "isRight . loads . dumps arbStyle $ x" $

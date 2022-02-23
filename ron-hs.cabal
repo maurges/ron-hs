@@ -26,12 +26,13 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      LambdaCase
-      OverloadedStrings
-      MultiWayIf
       BangPatterns
-      TypeOperators
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
       ScopedTypeVariables
+      TypeOperators
   ghc-options: -Wall -Wcompat -Werror=incomplete-patterns
   build-depends:
       QuickCheck
@@ -52,17 +53,19 @@ test-suite test
   other-modules:
       ForExample
       Generic
+      GenericOptions
       Paths_ron_hs
   hs-source-dirs:
       test
   default-extensions:
-      LambdaCase
-      OverloadedStrings
-      MultiWayIf
       BangPatterns
-      TypeOperators
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
       ScopedTypeVariables
-  ghc-options: -Wall -Wcompat -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Werror=incomplete-patterns -Wno-all -Wdefault -Wincomplete-patterns -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
     , base
