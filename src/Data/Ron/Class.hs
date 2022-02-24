@@ -223,6 +223,8 @@ instance (FromRon a1, FromRon a2) => FromRon (a1, a2) where
 
 --- Generic instance
 
+-- | Part of 'RonSettings' that applies to both encoding and decoding, and
+-- separately
 data RonFlags = RonFlags
     { implicitSome :: !Bool
     -- ^ Like ron-rs's @implicit_some@: 'Nothing' in record fields is
@@ -428,7 +430,7 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
                                     K1 . Just <$> fromRon x
                                 | otherwise =
                                     fail "Not using decodeImplicitSome"
-                        in tryUnwrapped <<|>> fromRonRec conf x
+                        in fromRonRec conf x <<|>> tryUnwrapped
                     | otherwise -> fail "Trailing members in tuple"
             Right xs'
                 | implicitSome . decodeFlags $ conf ->
@@ -437,7 +439,7 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
                         Just x ->
                             let unwrapped = M1 . K1 . Just <$> fromRon x
                                 wrapped = M1 <$> fromRonRec conf x
-                            in unwrapped <<|>> wrapped
+                            in wrapped <<|>> unwrapped
                 | otherwise -> case Map.lookup field xs' of
                     Nothing -> fail "Field not present in record"
                     Just x -> M1 <$> fromRonRec conf x
