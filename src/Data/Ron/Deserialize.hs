@@ -13,7 +13,7 @@ import Data.ByteString.Char8 (ByteString, cons)
 import Data.ByteString.Lazy (toStrict)
 import Data.Char (isAlpha, isAlphaNum, chr)
 import Data.List (intercalate)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Data.Ron.Class (FromRon, fromRon)
 import Data.Scientific (Scientific, scientific)
 import Data.Text (Text, uncons)
@@ -21,7 +21,7 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Char8 as ByteString8

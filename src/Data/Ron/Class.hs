@@ -15,7 +15,7 @@ module Data.Ron.Class
 import Control.Arrow ((***))
 import Control.Applicative (liftA2)
 import Data.Int (Int8, Int16, Int32, Int64)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Data.Proxy (Proxy (..))
 import Data.Ron.Class.Internal (productSize, ProductSize)
 import Data.Scientific (fromFloatDigits, toRealFloat, Scientific)
@@ -29,7 +29,7 @@ import GHC.Generics
     , Constructor (conName, conIsRecord), Selector (selName)
     )
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value

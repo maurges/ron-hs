@@ -7,7 +7,7 @@ import Data.Maybe (isNothing)
 import Data.Ron.Class (ToRon (toRon))
 import Data.Text (pack)
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value

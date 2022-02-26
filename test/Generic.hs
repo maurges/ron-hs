@@ -4,7 +4,7 @@ module Generic
     ) where
 
 import GHC.Generics (Generic)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Data.Ron.Class (ParseResult, FromRon (fromRon), ToRon (toRon))
 import Data.Ron.Value (Value)
 import Data.Text (Text)

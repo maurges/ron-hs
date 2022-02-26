@@ -5,7 +5,7 @@ module GenericOptions
     ) where
 
 import GHC.Generics (Generic)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Data.Ron.Class (ToRon, FromRon, toRonGeneric, fromRonGeneric, RonSettings (..), strictRonSettings)
 import Data.Function ((&))
 import Data.Ron.Value (Value (..))
