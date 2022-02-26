@@ -58,6 +58,7 @@ test-suite test
       Generic
       GenericOptions
       Optics.Ron.Settings
+      Values
       Paths_ron_hs
   hs-source-dirs:
       test

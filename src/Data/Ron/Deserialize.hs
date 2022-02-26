@@ -72,7 +72,7 @@ decodeFile path = loadFile path >>= pure . fromRon >>= \case
 
 -- | Parse a 'ByteString' to a 'Value'. You probably want 'decode' instead
 loads :: ByteString -> Either String Value
-loads = parseOnly (ws *> toplevel <* endOfInput)
+loads = parseOnly (ws *> toplevel <* (takeWhile (const True) >>= \case {s | ByteString.null s -> pure (); s -> fail $ "Expected eof, got" <> show s}))
 
 -- | Parse a lazy 'Lazy.ByteString' to a 'Value'. You probably want
 -- 'decodeLazy' instead
@@ -248,10 +248,11 @@ floating positive !wholeStr = do
     ws
     pure $! scientific mantissa (fromIntegral power)
     where
-        decimal' = anyChar >>= \case
-            '+' -> decimal True
-            '-' -> decimal False
-            _ -> fail "Expected + or - (scientific notation power)"
+        decimal' = peekChar' >>= \case
+            '+' -> skip1 *> decimal True
+            '-' -> skip1 *> decimal False
+            c | isDigit c -> decimal True
+            _ -> fail "Expected + or - or digit (scientific notation power)"
 
 
 --- Strings ---

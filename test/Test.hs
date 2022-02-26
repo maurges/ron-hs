@@ -11,6 +11,7 @@ import ForExample (exampleTests)
 import Generic (genericsTests)
 import GenericOptions (genericOptionsTests)
 import DerivingVia (derivingViaTests)
+import Values (valuesTests)
 
 main = defaultMain $ testGroup "properties"
     [ always_decodes
@@ -19,6 +20,7 @@ main = defaultMain $ testGroup "properties"
     , genericsTests
     , genericOptionsTests
     , derivingViaTests
+    , valuesTests
     ]
 
 always_decodes = testProperty "isRight . loads . dumps arbStyle $ x" $
