@@ -107,3 +107,10 @@ datatypes.
   implement the ron-rs's pragmas this way.
 - [ ] Option to treat record as a tuple in encoding
   * [ ] A more difficult task is an option to treat as any of those in decoding
+- [ ] Data.Scientific doesn't handle bad float values very well: NaNs,
+  infinities, negative zeroes; but ron-rs does. This is not a part of their
+  spec, soooo, do I want to handle that?
+  * Akchewally, according to the grammar, the values inf and NaN should be
+    identifiers. And the semantics of -0.0 are not mentioned. So I am more
+    correct than the ron-rs guys! At least until they fix the grammar
+    definition.
