@@ -16,6 +16,7 @@ default-extensions:
 - NamedFieldPuns
 - OverloadedStrings
 - ScopedTypeVariables
+- TypeApplications
 - TypeOperators
 
 library:

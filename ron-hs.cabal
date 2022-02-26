@@ -16,6 +16,7 @@ build-type:     Simple
 library
   exposed-modules:
       Data.Ron.Class
+      Data.Ron.Class.Deriving
       Data.Ron.Class.Internal
       Data.Ron.Deserialize
       Data.Ron.Serialize
@@ -32,6 +33,7 @@ library
       NamedFieldPuns
       OverloadedStrings
       ScopedTypeVariables
+      TypeApplications
       TypeOperators
   ghc-options: -Wall -Wcompat -Werror=incomplete-patterns
   build-depends:
@@ -54,6 +56,7 @@ test-suite test
       ForExample
       Generic
       GenericOptions
+      GenericVia
       Optics.Ron.Settings
       Paths_ron_hs
   hs-source-dirs:
@@ -65,6 +68,7 @@ test-suite test
       NamedFieldPuns
       OverloadedStrings
       ScopedTypeVariables
+      TypeApplications
       TypeOperators
   ghc-options: -Wall -Wcompat -Werror=incomplete-patterns -Wno-all -Wdefault -Wincomplete-patterns -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:

@@ -1,6 +1,5 @@
 {-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE TypeApplications #-}
 module Data.Ron.Class
     ( ToRon (..), FromRon (..)
     , ParseResult
@@ -8,7 +7,8 @@ module Data.Ron.Class
     , fromRonGeneric
     , RonSettings (..)
     , RonFlags (..)
-    , strictRonSettings
+    , strictRonSettings, laxRonSettings
+    , GToRon, GFromRon
     ) where
 
 import Control.Arrow ((***))
@@ -29,7 +29,6 @@ import GHC.Generics
     )
 
 import qualified Data.Map as Map
-import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value
@@ -236,23 +235,27 @@ data RonFlags = RonFlags
 
 -- | Settings for use with 'Generic' RON encoding/decoding
 data RonSettings = RonSettings
-    { fieldModifier :: !(Text -> Text)
+    { fieldModifier :: !(String -> String)
+    , constructorModifier :: !(String -> String)
     -- ^ Field renamer in RON representation
     , decodeFlags :: !RonFlags
     , encodeFlags :: !RonFlags
     }
 
-data Context = Context
-    { isSingleConstructor :: !Bool
+newtype Context = Context
+    { isSingleConstructor :: Bool
     } deriving (Eq, Show)
 
 -- | Encode ron using 'Generic' instance and provided 'RonSettings'
 toRonGeneric :: (Generic a, GToRon (Rep a)) => RonSettings -> a -> Value
 toRonGeneric conf = toRonG conf . from
 
+-- | Values are expected to exactly conform: all fields should have the same
+-- name, all constructors should be present, no @Some@ omission
 strictRonSettings :: RonSettings
 strictRonSettings = RonSettings
     { fieldModifier = id
+    , constructorModifier = id
     , decodeFlags = RonFlags
         { implicitSome = False
         , skipSingleConstructor = False
@@ -263,8 +266,24 @@ strictRonSettings = RonSettings
         }
     }
 
+-- | Relaxes 'strictRonSettings' on constructor omission and implicitSome when
+-- decoding, but encodes in the same strict way
+laxRonSettings :: RonSettings
+laxRonSettings = RonSettings
+    { fieldModifier = id
+    , constructorModifier = id
+    , decodeFlags = RonFlags
+        { implicitSome = True
+        , skipSingleConstructor = True
+        }
+    , encodeFlags = RonFlags
+        { implicitSome = False
+        , skipSingleConstructor = False
+        }
+    }
+
 toRonDefault :: (Generic a, GToRon (Rep a)) => a -> Value
-toRonDefault = toRonGeneric strictRonSettings
+toRonDefault = toRonGeneric laxRonSettings
 
 class GToRon f where
     toRonG :: RonSettings -> f a -> Value
@@ -315,33 +334,33 @@ instance GToRonProduct U1 where
 instance {-# OVERLAPPING #-} (Selector s, ToRon c)
     => GToRonProduct (M1 S s (K1 R (Maybe c))) where
     toRonProduct conf (M1 (K1 x)) =
-        let field = pack $ selName (undefined :: t s (K1 R (Maybe c)) a)
+        let field = selName (undefined :: t s (K1 R (Maybe c)) a)
         in case x of
             Nothing | implicitSome . encodeFlags $ conf ->
-                if Text.null field
+                if null field
                     then Left . Vector.singleton . toRon $ Nothing @()
                     else Right Map.empty
             Just x' | implicitSome . encodeFlags $ conf ->
-                if Text.null field
+                if null field
                     then Left . Vector.singleton . toRon $ x'
                     else
-                        let field' = fieldModifier conf field
+                        let field' = pack $ fieldModifier conf field
                             value = toRon x'
                         in Right $ Map.singleton field' value
             x'
-                | Text.null field -> Left . Vector.singleton . toRon $ x'
+                | null field -> Left . Vector.singleton . toRon $ x'
                 | otherwise ->
-                    let field' = fieldModifier conf field
+                    let field' = pack $ fieldModifier conf field
                     in Right . Map.singleton field' $ toRon x'
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
     toRonProduct conf (M1 x) =
-        let field = pack $ selName (undefined :: t s f a)
+        let field = selName (undefined :: t s f a)
             value = toRonRec conf x
         in case field of
             "" -> Left . Vector.singleton $ value
             _field ->
-                let field' = fieldModifier conf field
+                let field' = pack $ fieldModifier conf field
                 in Right $ Map.singleton field' value
 
 instance (GToRonProduct pl, GToRonProduct pr)
@@ -418,7 +437,7 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
     => GFromRonProduct (M1 S s (K1 R (Maybe c))) where
     fromRonProduct conf xs =
         let field =
-                fieldModifier conf . pack $
+                pack . fieldModifier conf $
                     selName (undefined :: t s (K1 R (Maybe c)) a)
         in case xs of
             Left xs' -> case Vector.uncons xs' of
@@ -446,7 +465,7 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
 
 instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
     fromRonProduct conf xs =
-        let field = fieldModifier conf . pack $ selName (undefined :: t s f a)
+        let field = pack . fieldModifier conf $ selName (undefined :: t s f a)
         in case xs of
             Left xs' -> case Vector.uncons xs' of
                 Nothing -> fail "Not enough elements in tuple"
