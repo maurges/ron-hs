@@ -146,8 +146,8 @@ ronBuilder SerializeSettins {..} = toplevel where
             -- Don't want to turn them into trailing/historic comma for
             -- toplevel only, since I personally always forget to put it after
             -- the previous element
-            List xs -> listContent 0 xs
-            Record _name xs -> recordContent 0 xs
+            List xs | not (Vector.null xs) -> listContent 0 xs
+            Record name xs | Text.null name -> recordContent 0 xs
             v -> go startIndent v
         else go startIndent
         -- special handling for haskell-style: don't indent the topmost block

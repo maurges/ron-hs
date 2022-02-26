@@ -93,10 +93,17 @@ datatypes.
   good as for bytestring.
   * Done. Performance is basically the same, but correctness is improved.
 - [ ] Do I really need Map and Vector? I just copied that part from aeson
+  * Map makes it very convenient to decode records, vector is probably more
+    efficient in encoding tuples. Although there is a low-hanging optimization
+    fruit for tuple encoding that I've not taken yet: preallocate the vector
+    and put elements by index
+  * Another good thing about (ordered) map is that it normalizes field order
 - [x] See what else good there is in aeson and yank that. Loading from files
   maybe?
   * Looks like everything I ever used is done
 - [x] Should expose attoparsec's chunk-based parse so that this could be used
   with conduit or pipes.
-- [ ] Allow for generic deriving to have options with DerivingVia. Can
+- [x] Allow for generic deriving to have options with DerivingVia. Can
   implement the ron-rs's pragmas this way.
+- [ ] Option to treat record as a tuple in encoding
+  * [ ] A more difficult task is an option to treat as any of those in decoding
