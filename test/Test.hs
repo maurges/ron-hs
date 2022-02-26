@@ -4,13 +4,13 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Ron.Deserialize (loads)
 import Data.Ron.Serialize (dumps, compactStyle)
 import Data.Ron.Value.Internal (similar')
+import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 
 import ForExample (exampleTests)
 import Generic (genericsTests)
 import GenericOptions (genericOptionsTests)
-
-import Test.Tasty
+import DerivingVia (derivingViaTests)
 
 main = defaultMain $ testGroup "properties"
     [ always_decodes
@@ -18,6 +18,7 @@ main = defaultMain $ testGroup "properties"
     , exampleTests
     , genericsTests
     , genericOptionsTests
+    , derivingViaTests
     ]
 
 always_decodes = testProperty "isRight . loads . dumps arbStyle $ x" $

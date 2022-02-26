@@ -3,6 +3,7 @@
 module Data.Ron.Class
     ( ToRon (..), FromRon (..)
     , ParseResult
+    -- * Generic encoding
     , toRonGeneric
     , fromRonGeneric
     , RonSettings (..)
@@ -236,8 +237,8 @@ data RonFlags = RonFlags
 -- | Settings for use with 'Generic' RON encoding/decoding
 data RonSettings = RonSettings
     { fieldModifier :: !(String -> String)
-    , constructorModifier :: !(String -> String)
     -- ^ Field renamer in RON representation
+    , constructorModifier :: !(String -> String)
     , decodeFlags :: !RonFlags
     , encodeFlags :: !RonFlags
     }
@@ -285,6 +286,8 @@ laxRonSettings = RonSettings
 toRonDefault :: (Generic a, GToRon (Rep a)) => a -> Value
 toRonDefault = toRonGeneric laxRonSettings
 
+-- | Internal class for converting to Ron. You might need it if you're writing
+-- you own generic combinators
 class GToRon f where
     toRonG :: RonSettings -> f a -> Value
 
@@ -381,8 +384,10 @@ fromRonGeneric
 fromRonGeneric conf = fmap to . fromRonG conf
 
 fromRonDefault :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
-fromRonDefault = fromRonGeneric strictRonSettings
+fromRonDefault = fromRonGeneric laxRonSettings
 
+-- | Internal class for converting from Ron. You might need it if you're
+-- writing you own generic combinators
 class GFromRon f where
     fromRonG :: RonSettings -> Value -> ParseResult (f a)
 

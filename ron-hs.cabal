@@ -53,10 +53,10 @@ test-suite test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
+      DerivingVia
       ForExample
       Generic
       GenericOptions
-      GenericVia
       Optics.Ron.Settings
       Paths_ron_hs
   hs-source-dirs:
