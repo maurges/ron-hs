@@ -1,10 +1,11 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-do-bind #-}
 module Data.Ron.Deserialize
-    ( decode, decodeLazy, decodeFile
-    , loads, loadsLazy, loadFile, loadFile'
-    , toplevel, value
-    , ParseError, DecodeError
-    ) where
+--     ( decode, decodeLazy, decodeFile
+--     , loads, loadsLazy, loadFile, loadFile'
+--     , toplevel, value
+--     , ParseError, DecodeError
+--     ) where
+    where
 
 import Control.Applicative ((<|>), liftA2)
 import Control.Exception (Exception, throwIO)
@@ -29,7 +30,7 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 
-import Data.Attoparsec.ByteString.Char8 hiding (feed, hexadecimal, decimal, isSpace, scientific)
+import Data.Attoparsec.ByteString.Char8 hiding (feed, hexadecimal, decimal, isSpace, scientific, number)
 import Data.Ron.Value
 import Prelude hiding (takeWhile)
 
@@ -79,14 +80,14 @@ loads = parseOnly (ws *> toplevel <* (takeWhile (const True) >>= \case {s | Byte
 loadsLazy :: Lazy.ByteString -> Either String Value
 loadsLazy str = case Lazy.toChunks str of
     [] -> Left "Empty input"
-    s:ss -> go ss $! parse toplevel s
+    s:ss -> go ss $! parse (ws *> toplevel) s
   where
     -- since toplevel requires eof after end, _rest should always be nothing
     go _ (Fail _rest contexts message) = Left $
         "Parse error: " <> message
         <> "; context: " <> intercalate "; " contexts
-    go [] (Done _rest x) = pure x
-    go _ (Done _rest _x) = Left "Unconsumed input after value"
+    go [] (Done rest x) | ByteString.null rest = pure x
+    go _ (Done rest _x) = Left $ "Unconsumed input after value: " <> show rest
     go [] (Partial _) = Left "Unexpected end of input"
     go (s:ss) (Partial feed) = go ss $! feed s
 
@@ -107,40 +108,23 @@ loadFile' path = loadsLazy <$> Lazy.readFile path
 -- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
 -- 'value'. The first two are hs-ron extensions
 toplevel :: Parser Value
-toplevel = peekChar' >>= \case
-    -- raw string, algebraic struct, or a field in toplevel 'record'
-    'r' -> skip1 >> peekChar >>= \case
-        Nothing -> pure $ Unit "r"
-        Just '#' -> String <$> ronRawString
-        Just '\"' -> String <$> ronRawString
-        _ -> do
-            ident <- decodeUtf8 . cons 'r' <$> takeWhile isKeyword
-            ws
-            peekChar >>= \case
-                Just '(' -> recordOrTuple ident >>= toplevelList
-                Just ':' -> toplevelRecord ident
-                _ -> ws *> pure (Unit ident)
-    c | startsIdentifier c -> do
-            ident <- decodeUtf8 <$> takeWhile isKeyword
-            ws
-            peekChar >>= \case
-                Just '(' -> recordOrTuple ident >>= toplevelList
-                Just ':' -> skip1 *> ws *> toplevelRecord ident
-                _ -> ws *> toplevelList (Unit ident)
-      | otherwise -> value >>= toplevelList
+toplevel = toplevelRecord <|>  do
+    v <- value
+    toplevelList v <|> pure v
 
 toplevelList :: Value -> Parser Value
-toplevelList first = peekChar >>= \case
-    Just ',' -> do
-        skip1 -- ,
-        ws
-        xs <- sepBy value (char ',' *> ws)
-        option () $ char ',' *> ws
-        pure . List . Vector.fromList $ first:xs
-    _ -> pure first
+toplevelList first = do
+    char ','
+    ws
+    xs <- Vector.fromList . (first :) <$> sepBy value (char ',' *> ws)
+    option () $ char ',' *> ws
+    pure . List $ xs
 
-toplevelRecord :: Text -> Parser Value
-toplevelRecord firstField = do
+toplevelRecord :: Parser Value
+toplevelRecord = do
+    firstField <- keyword
+    char ':'
+    ws
     firstValue <- value
     let initial = (firstField, firstValue)
     peekChar >>= \case
@@ -148,12 +132,12 @@ toplevelRecord firstField = do
             skip1 -- ,
             ws
             let pair = do
-                    k <- liftA2 cons (satisfy startsIdentifier) (takeWhile isKeyword)
+                    k <- keyword
                     ws
                     char ':'
                     ws
                     v <- value
-                    pure (decodeUtf8 k, v)
+                    pure (k, v)
             xs <- sepBy pair (char ',' *> ws)
             option () $ char ',' *> ws
             pure . Record "" . Map.fromList $ initial:xs
@@ -161,40 +145,41 @@ toplevelRecord firstField = do
         _ -> fail "Expecting , at toplevel record"
 
 value :: Parser Value
-value = peekChar' >>= \case
-    c | startsNumber c -> intOrFloat
-      | startsChar c -> Char <$> character
-      | startsString c -> String <$> ronString
-      | startsList c -> List <$> list
-      | startsMap c -> Map <$> ronMap
-      | startsStruct c -> recordOrTuple ""
-      | startsIdentifier c -> identifierLike c
-      | otherwise -> fail $ "Unexpected symbol: " <> show c
+value = intOrFloat
+    <|> Char <$> character
+    <|> String <$> (ronString <|> ronRawString)
+    <|> List <$> list
+    <|> Map <$> ronMap
+    <|> Unit <$> unitWithBrackets
+    <|> record
+    <|> tuple
+    <|> Unit <$> unit
+    <|> fail "Incorrect value"
 
 
 --- Numbers ---
 
 
+number :: (Char -> Bool) -> Parser ByteString
+number p = liftA2 cons (satisfy p) (takeWhile $ \c -> c == '_' || p c)
+
 intOrFloat :: Parser Value
-intOrFloat = go <* ws where
-  go = do
-    !positive <- ((== '+') <$> satisfy (\c -> c == '-' || c == '+'))
-             <|> pure True
-    let intOrFloatSimple = do
-            whole <- takeWhile (\c -> decimalDigit c || c == '_')
-            peekChar >>= \case
-                Just '.' -> skip1 *> (Floating <$> floating positive whole)
-                _ -> ws *> pure (Integral $ buildNumber 10 positive whole)
-    peekChar' >>= \case
-        '.' -> skip1 *> (Floating <$> floating positive "0")
-        '0' -> skip1 >> peekChar >>= \case
-            Nothing -> pure $ Integral 0
-            Just 'x' -> skip1 *> (Integral <$> hexadecimal positive)
-            Just 'o' -> skip1 *> (Integral <$> octal positive)
-            Just 'b' -> skip1 *> (Integral <$> binary positive)
-            Just '.' -> skip1 *> (Floating <$> floating positive "0")
-            Just _ -> intOrFloatSimple
-        _ -> intOrFloatSimple
+intOrFloat = do
+    !positive <- peekChar' >>= \case
+        '+' -> skip1 *> pure True
+        '-' -> skip1 *> pure False
+        _ -> pure True
+    choice
+        [ string "0x" *> fmap Integral (hexadecimal positive)
+        , string "0o" *> fmap Integral (octal positive)
+        , string "0b" *> fmap Integral (binary positive)
+        , char '.' *> fmap Floating (floating positive "0")
+        , do -- floating
+            whole <- number decimalDigit
+            char '.'
+            Floating <$> floating positive whole
+        , Integral <$> decimal positive
+        ]
 
 buildNumber :: Integer -> Bool -> ByteString -> Integer
 buildNumber base positive digits = mbNegate . ByteString8.foldl' step 0 $ digits where
@@ -227,13 +212,13 @@ buildNumber base positive digits = mbNegate . ByteString8.foldl' step 0 $ digits
         _ -> error "Not a number"
 
 hexadecimal positive
-    = buildNumber 16 positive <$> takeWhile (\c -> c == '_' || hexadecimalDigit c) <* ws
+    = buildNumber 16 positive <$> number hexadecimalDigit <* ws
 decimal positive
-    = buildNumber 10 positive <$> takeWhile (\c -> c == '_' || decimalDigit c) <* ws
+    = buildNumber 10 positive <$> number decimalDigit <* ws
 octal positive
-    = buildNumber 8 positive <$> takeWhile (\c -> c == '_' || octalDigit c) <* ws
+    = buildNumber 8 positive <$> number octalDigit <* ws
 binary positive
-    = buildNumber 2 positive <$> takeWhile (\c -> c == '_' || binaryDigit c) <* ws
+    = buildNumber 2 positive <$> number binaryDigit <* ws
 
 floating :: Bool -> ByteString -> Parser Scientific
 floating positive !wholeStr = do
@@ -259,18 +244,18 @@ floating positive !wholeStr = do
 
 
 character :: Parser Char
-character = skip1 >> peekChar' >>= \case
-  '\\' -> skip1 *> escapedChar <* char '\'' <* ws
-  _ -> do
-    chunk <- takeWhile (/= '\'')
-    skip1
-    ws
-    text <- case decodeUtf8' chunk of
-            Right x -> pure x
-            Left _err -> fail "Incorrect utf8 in Char"
-    case uncons text of
-        Just (c, cs) | Text.length cs == 0 -> pure c
-        _ -> fail "Incorrect length of Char content"
+character = char '\'' >> peekChar' >>= \case
+    '\\' -> skip1 *> escapedChar <* char '\'' <* ws
+    _ -> do
+        chunk <- takeWhile1 (/= '\'')
+        skip1
+        ws
+        text <- case decodeUtf8' chunk of
+                Right x -> pure x
+                Left _err -> fail "Incorrect utf8 in Char"
+        case uncons text of
+            Just (c, cs) | Text.length cs == 0 -> pure c
+            _ -> fail "Incorrect length of Char content"
 
 -- This is common for string and char. It seems by the spec @\'@ is incorrect
 -- sequence for string, and @\"@ is incorrect sequence for char. I choose to
@@ -293,7 +278,7 @@ escapedChar = anyChar >>= \case
   _ -> fail "Invalid escape sequence"
 
 ronString :: Parser Text
-ronString = skip1 *> (decodeUtf8 . toStrict . Builder.toLazyByteString <$> go mempty) <* skip1 <* ws
+ronString = char '\"' *> (decodeUtf8 . toStrict . Builder.toLazyByteString <$> go mempty) <* skip1 <* ws
   where
     go :: Builder.Builder -> Parser Builder.Builder
     go !builder = do
@@ -309,6 +294,7 @@ ronString = skip1 *> (decodeUtf8 . toStrict . Builder.toLazyByteString <$> go me
 
 ronRawString :: Parser Text
 ronRawString = do
+    char 'r'
     delimeter <- takeWhile (== '#')
     char '\"'
     let go !builder = do
@@ -326,7 +312,7 @@ ronRawString = do
 
 list :: Parser (Vector Value)
 list = do
-    skip1 -- [
+    char '['
     ws
     xs <- sepBy value (char ',' *> ws)
     option () $ char ',' *> ws
@@ -336,7 +322,7 @@ list = do
 
 ronMap :: Parser (Map Value Value)
 ronMap = do
-    skip1 -- {
+    char '{'
     ws
     let pair = do
             k <- value
@@ -354,85 +340,45 @@ ronMap = do
 --- Algeraic types
 
 
-recordOrTuple :: Text -> Parser Value
-recordOrTuple name = skip1 >> ws >> peekChar' >>= \case
-    -- either a value or an identifier (or end)
-    -- identifier overlaps with 'record' field
-    ')' -> skip1 *> ws *> pure (Unit name)
-    'r' -> skip1 >> peekChar' >>= \case
-        c | c == '#' || c == '\"' -> do
-            val <- String <$> ronRawString
-            ws
-            Tuple name <$> tupleAndComma [val]
-          | otherwise -> common (Just 'r')
-    c | startsIdentifier c -> common Nothing
-        -- not starting an identifier means it's not a 'record' field, so a 'tuple'
-      | otherwise -> Tuple name <$> tuple []
-  where
-    common mbHead = do
-        ident <- decodeUtf8 . maybe id cons mbHead <$> takeWhile isKeyword
-        ws
-        peekChar' >>= \case
-            ':' -> skip1 *> ws *> do
-                v <- value
-                Record name <$> recordAndComma [(ident, v)]
-            '(' -> do -- a 'tuple' with first element as a 'tuple' or 'record'
-                val <- recordOrTuple ident
-                Tuple name <$> tupleAndComma [val]
-            ',' -> skip1 *> ws *> (Tuple name <$> tuple [Unit ident])
-            ')' -> skip1 *> ws *> pure (Tuple name (Vector.fromList [Unit ident]))
-            _ -> fail "Expecting expecting ':', ',' or '('"
+keyword :: Parser Text
+keyword = decodeUtf8 <$> liftA2 cons (satisfy startsIdentifier) (takeWhile isKeyword)
+
+unit, unitWithBrackets :: Parser Text
+unit = keyword <* ws
+unitWithBrackets
+      = (keyword <* ws <* char '(' <* ws <* char ')' <* ws)
+    <|> (char '(' *> ws *> char ')' *> ws *> pure "")
 
 
-tuple, tupleAndComma :: [Value] -> Parser (Vector Value)
-tuple initial = do
-    xs <- sepBy value (char ',' *> ws)
-    option () $ char ',' *> ws
-    char ')'
+record :: Parser Value
+record = do
+    name <- keyword <|> pure ""
     ws
-    pure . Vector.fromList $ initial <> xs
-tupleAndComma initial = anyChar >>= \case
-    ',' -> ws *> tuple initial
-    ')' -> ws *> pure (Vector.fromList initial)
-    _ -> fail "Expecting ',' or ')' in tuple"
-
-record, recordAndComma :: [(Text, Value)] -> Parser (Map Text Value)
-record initial = do
+    char '('
+    ws
     let pair = do
-            k <- liftA2 cons (satisfy startsIdentifier) (takeWhile isKeyword)
+            k <- keyword
             ws
             char ':'
             ws
             v <- value
-            pure (decodeUtf8 k, v)
+            pure (k, v)
     xs <- sepBy pair (char ',' *> ws)
     option () $ char ',' *> ws
     char ')'
     ws
-    pure . Map.fromList $ initial <> xs
-recordAndComma initial = anyChar >>= \case
-    ',' -> ws *> record initial
-    ')' -> ws *> pure (Map.fromList initial)
-    _ -> fail "Expecting ',' or ')' in record"
+    pure . Record name . Map.fromList $ xs
 
--- | Algebraic struct (named unit, 'record', 'tuple') or a raw string
-identifierLike :: Char -> Parser Value
-identifierLike 'r' = skip1 >> peekChar >>= \case
-    Nothing -> pure $ Unit "r"
-    Just '#' -> String <$> ronRawString
-    Just '\"' -> String <$> ronRawString
-    _ -> do
-        name <- decodeUtf8 . cons 'r' <$> takeWhile isKeyword
-        ws
-        peekChar >>= \case
-            Just '(' -> recordOrTuple name
-            _ -> ws *> pure (Unit name)
-identifierLike _ = do
-    name <- decodeUtf8 <$> takeWhile isKeyword
+tuple :: Parser Value
+tuple = do
+    name <- (keyword <* ws) <|> pure ""
+    char '('
     ws
-    peekChar >>= \case
-        Just '(' -> recordOrTuple name
-        _ -> ws *> pure (Unit name)
+    xs <- sepBy value (char ',' *> ws)
+    option () $ char ',' *> ws
+    char ')'
+    ws
+    pure . Tuple name . Vector.fromList $ xs
 
 
 --- Common ---
@@ -461,13 +407,7 @@ ws = skipWhile isSpace >> peekChar >>= \case
 
 isSpace c = c == ' ' || c == '\n' || c == '\r' || c == '\t'
 isKeyword c = isAlphaNum c || c == '_' || c == '\''
-startsNumber c = c == '+' || c == '-' || c == '.' || decimalDigit c
-startsString c = c == '\"'
-startsList c = c == '['
-startsMap c = c == '{'
-startsStruct c = c == '('
 startsIdentifier c = isAlpha c || c == '_' -- this can also be a raw string
-startsChar c = c == '\''
 
 binaryDigit c = c == '0' || c == '1'
 octalDigit c = binaryDigit c || c == '2' || c == '3' || c == '4'
