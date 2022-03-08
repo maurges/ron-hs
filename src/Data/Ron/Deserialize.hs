@@ -184,6 +184,7 @@ intOrFloat = go <* ws where
             whole <- takeWhile (\c -> decimalDigit c || c == '_')
             peekChar >>= \case
                 Just '.' -> skip1 *> (Floating <$> floating positive whole)
+                Just 'e' -> Floating <$> floating positive whole
                 _ -> ws *> pure (Integral $ buildNumber 10 positive whole)
     peekChar' >>= \case
         '.' -> skip1 *> (Floating <$> floating positive "0")
@@ -237,7 +238,7 @@ binary positive
 
 floating :: Bool -> ByteString -> Parser Scientific
 floating positive !wholeStr = do
-    -- dot is already skipped
+    -- dot is already skipped, e is not
     !fracStr <- takeWhile (\c -> c == '_' || decimalDigit c)
     let !fracPart = fromInteger $! buildNumber 10 positive fracStr
     let !wholePart = fromInteger $! buildNumber 10 positive wholeStr

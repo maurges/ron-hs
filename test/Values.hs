@@ -16,6 +16,11 @@ valuesTests = testGroup "Various specific values"
         , testCase "1.0e1" $ decode @Double " 1.0e1 " @?= Right 1e1
         , testCase "1.0e+1" $ decode @Double " 1.0e+1 " @?= Right 1e1
         , testCase "1.0e-1" $ decode @Double " 1.0e-1 " @?= Right 1e-1
+        , testCase "1e1" $ decode @Double " 1e1 " @?= Right 1e1
+        , testCase "1e+1" $ decode @Double " 1e+1 " @?= Right 1e1
+        , testCase "1e-1" $ decode @Double " 1e-1 " @?= Right 1e-1
+        , testCase "1__e1__" $ decode @Double " 1__e1__ " @?= Right 1e1
+        , testCase "1_._0e1_" $ decode @Double " 1_._0e1_ " @?= Right 1e1
         ]
     , testCase "raw string" $ decode @Text
         " r##\" foo \\n bar \"baz\" \"## "

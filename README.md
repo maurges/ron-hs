@@ -67,7 +67,11 @@ datatypes.
     field2: "other value",
    ```
 
-6. Difference in internal representation.  
+6. Intended and unintended differences in floating point handling. Inteded is
+   that ron-rs supports `-0` and `-inf` and ron-hs doesn't yet. Unintended is
+   that ron-hs uses Scientific and so is infinitely precise.
+
+7. Difference in internal representation.  
    So in ron-rs there's a distinction between enums and structs, even though
    enums completely subsume structs. This is gone.  
    Also according to the (admittedly informal) specification, there is a
@@ -107,10 +111,16 @@ datatypes.
   implement the ron-rs's pragmas this way.
 - [ ] Option to treat record as a tuple in encoding
   * [ ] A more difficult task is an option to treat as any of those in decoding
-- [ ] Data.Scientific doesn't handle bad float values very well: NaNs,
+- [x] Data.Scientific doesn't handle bad float values very well: NaNs,
   infinities, negative zeroes; but ron-rs does. This is not a part of their
   spec, soooo, do I want to handle that?
   * Akchewally, according to the grammar, the values inf and NaN should be
     identifiers. And the semantics of -0.0 are not mentioned. So I am more
     correct than the ron-rs guys! At least until they fix the grammar
     definition.
+  * Ok, I talked to the ron-rs team about the grammar, and the ambiguity is
+    intended, and the spec was updated. So now I handle positive nans and infs
+    for Doubles and Floats, and negative ones are in works and mentioned as a
+    difference
+- [ ] Try using it in another project, and rearrange imports to be more
+  convenient

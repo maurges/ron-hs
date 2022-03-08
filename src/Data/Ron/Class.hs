@@ -125,14 +125,24 @@ instance FromRon Scientific where
     fromRon (Floating x) = pure x
     fromRon _ = fail "Not a floating"
 instance ToRon Double where
-    toRon = Floating . fromFloatDigits
+    toRon x
+        | isNaN x = Unit "NaN"
+        | isInfinite x = Unit "inf"
+        | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Double where
     fromRon (Floating x) = pure . toRealFloat $ x
+    fromRon (Unit "inf") = pure $! read "Infinity"
+    fromRon (Unit "NaN") = pure $! read "NaN"
     fromRon _ = fail "Not a floating"
 instance ToRon Float where
-    toRon = Floating . fromFloatDigits
+    toRon x
+        | isNaN x = Unit "NaN"
+        | isInfinite x = Unit "inf"
+        | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Float where
     fromRon (Floating x) = pure . toRealFloat $ x
+    fromRon (Unit "inf") = pure $! read "Infinity"
+    fromRon (Unit "NaN") = pure $! read "NaN"
     fromRon _ = fail "Not a floating"
 
 instance ToRon Char where
