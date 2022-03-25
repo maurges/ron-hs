@@ -87,8 +87,13 @@ loadsLazy str = case Lazy.toChunks str of
         <> "; context: " <> intercalate "; " contexts
     go [] (Done _rest x) = pure x
     go _ (Done _rest _x) = Left "Unconsumed input after value"
-    go [] (Partial _) = Left "Unexpected end of input"
     go (s:ss) (Partial feed) = go ss $! feed s
+    go [] (Partial feed) = case feed "" of
+        (Fail _rest contexts message) -> Left $
+            "Parse error: " <> message
+            <> "; context: " <> intercalate "; " contexts
+        (Done _rest x) -> pure x
+        (Partial _) -> Left "Unexpected end of input"
 
 -- | Parse file. Throws 'ParseError'
 loadFile :: FilePath -> IO Value

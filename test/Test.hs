@@ -8,6 +8,7 @@ import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 
 import ForExample (exampleTests)
+import File (fileTests)
 import Generic (genericsTests)
 import GenericOptions (genericOptionsTests)
 import DerivingVia (derivingViaTests)
@@ -15,11 +16,12 @@ import Values (valuesTests)
 
 main = defaultMain $ testGroup "properties"
     [ always_decodes
-    , loads_dumps
-    , exampleTests
-    , genericsTests
-    , genericOptionsTests
     , derivingViaTests
+    , exampleTests
+    , fileTests
+    , genericOptionsTests
+    , genericsTests
+    , loads_dumps
     , valuesTests
     ]
 

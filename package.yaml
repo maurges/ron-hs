@@ -43,6 +43,7 @@ tests:
     - QuickCheck
     - bytestring
     - containers
+    - directory
     - optics-core
     - optics-th
     - tasty

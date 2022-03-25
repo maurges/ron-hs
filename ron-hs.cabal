@@ -54,6 +54,7 @@ test-suite test
   main-is: Test.hs
   other-modules:
       DerivingVia
+      File
       ForExample
       Generic
       GenericOptions
@@ -77,6 +78,7 @@ test-suite test
     , base
     , bytestring
     , containers
+    , directory
     , optics-core
     , optics-th
     , ron-hs

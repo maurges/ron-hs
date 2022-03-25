@@ -18,7 +18,7 @@ import Data.Text.Encoding (encodeUtf8, encodeUtf8BuilderEscaped)
 import Data.Ron.Class (ToRon (toRon))
 import Data.Word (Word8)
 import Test.QuickCheck (Arbitrary, arbitrary, chooseEnum)
-import System.IO (openFile, IOMode (WriteMode), hSetBinaryMode, hSetBuffering, BufferMode (BlockBuffering))
+import System.IO (IOMode (WriteMode), hSetBinaryMode, hSetBuffering, BufferMode (BlockBuffering), withFile)
 
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Builder.Prim as Prim
@@ -106,8 +106,7 @@ dumps settings = toLazyByteString . ronBuilder settings
 -- | Serialize a RON value into a file. You probably want to use 'encodeFile'
 -- instead
 dumpFile :: SerializeSettins -> FilePath -> Value -> IO ()
-dumpFile settings path value = do
-    handle <- openFile path WriteMode
+dumpFile settings path value = withFile path WriteMode $ \handle -> do
     -- recommended in builder package
     hSetBinaryMode handle True
     hSetBuffering handle $ BlockBuffering Nothing -- hmm
