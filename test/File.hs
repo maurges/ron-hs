@@ -25,7 +25,6 @@ withTempFile template callback = do
 writeAndRead = withTempFile "ron" $ \path -> do
     let value = Just ()
     encodeFile haskellStyle path value
-    putStrLn =<< readFile path
     value' <- decodeFile path
     value @?= value'
 
