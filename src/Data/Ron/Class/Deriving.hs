@@ -1,5 +1,5 @@
 {-# LANGUAGE KindSignatures, DataKinds #-}
-{-# LANGUAGE UndecidableInstances #-} -- type family in instance head
+{-# LANGUAGE UndecidableInstances, FlexibleContexts #-} -- type family in instance head
 {-# LANGUAGE PolyKinds #-}
 module Data.Ron.Class.Deriving
     ( RonWith (..)
