@@ -12,7 +12,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        resolver: ["nightly-2022-05-05", "lts-19.6", "lts-18.28", "lts-16.31"]
+        resolver: ["nightly-2022-05-05", "lts-19.6", "lts-18.28"]
+        # TODO: lts-16.31 fails because of missing TH.Lift on Scientific
+        # TODO: lts-14.27 fails because of missing optics package
 
     runs-on: ${{ matrix.os }}
 
