@@ -5,7 +5,7 @@ module Values
 import Data.Text (Text)
 import Data.Ron.Deserialize (decode)
 import Data.Ron.Serialize (dumps)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (testCase, (@?=), (@?))
 import Test.Tasty (testGroup)
 
 
@@ -21,7 +21,11 @@ valuesTests = testGroup "Various specific values"
         , testCase "1e-1" $ decode @Double " 1e-1 " @?= Right 1e-1
         , testCase "1__e1__" $ decode @Double " 1__e1__ " @?= Right 1e1
         , testCase "1_._0e1_" $ decode @Double " 1_._0e1_ " @?= Right 1e1
+        , testCase "inf" $ decode @Double " inf " @?= Right (read "Infinity")
         ]
+    , testCase "nan" $ case decode @Double " NaN " of
+        Left _ -> False @? "isRight . decode $ \"NaN\""
+        Right x -> isNaN x @? "isNaN . fromLeft . decode $ \"NaN\""
     , testCase "raw string" $ decode @Text
         " r##\" foo \\n bar \"baz\" \"## "
         @?= Right " foo \\n bar \"baz\" "
