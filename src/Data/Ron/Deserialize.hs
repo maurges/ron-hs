@@ -1,9 +1,14 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-do-bind #-}
+-- | Ron routines for deserialization. Also exposes the underlying attoparsec
+-- parsers if you want to build more complicated consumers of ron, like
+-- conduits or pipes
 module Data.Ron.Deserialize
     ( decode, decodeLazy, decodeFile
     , loads, loadsLazy, loadFile, loadFile'
-    , toplevel, value
+    -- * Exceptions
     , ParseError, DecodeError
+    -- * Parsers
+    , toplevel, value
     ) where
 
 import Control.Applicative ((<|>), liftA2)
@@ -110,7 +115,7 @@ loadFile' path = loadsLazy <$> Lazy.readFile path
 
 
 -- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
--- 'value'. The first two are hs-ron extensions
+-- 'value'. The first two are ron-hs extensions
 toplevel :: Parser Value
 toplevel = peekChar' >>= \case
     -- raw string, algebraic struct, or a field in toplevel 'record'
@@ -165,6 +170,8 @@ toplevelRecord firstField = do
         Nothing -> pure . Record "" . Map.fromList $ [initial]
         _ -> fail "Expecting , at toplevel record"
 
+-- | A ron value as defined by the ron-rs spec (with minor deviations described
+-- in this package)
 value :: Parser Value
 value = peekChar' >>= \case
     c | startsNumber c -> intOrFloat

@@ -64,7 +64,7 @@ data UseStrict
 -- | Sets a flag in @encodeFlags@. Can set anything with 'ReifyFlagOptions'
 -- instances, like 'ImplicitSome', 'SkipSingleConstructor'
 data EncodeWith a
--- | Same as above for @decodeFlags
+-- | Same as above for @decodeFlags@
 data DecodeWith a
 -- | Same as setting both options above
 data ConvertWith a
@@ -72,11 +72,22 @@ data ConvertWith a
 -- have it after 'FieldsDropPrefix', as options are applied left to right
 data FieldsToSnakeCase
 -- | Drop the usual lens prefix: underscore followed by several lowercase
--- letters; regex for this is @s/^_[[:lowercase:]]+([[:uppercase:]].*)/\1/@.
+-- letters; regex for this is @s\/^_[[:lowercase:]]+([[:uppercase:]].*)\/\\1\/@.
 -- You probably want to use this field modifier before other field modifiers,
 -- as they are applied left to right
 data FieldsDropPrefix
 
+-- | Typeclass for you to implement your own options. Here's how
+-- 'FieldsToSnakeCase' uses it:
+--
+-- @
+--      instance ReifySettingsOptions FieldsToSnakeCase where
+--          reifyS Proxy s@RonSettings {fieldModifier} = s
+--              { fieldModifier = toSnake . fieldModifier }
+-- @
+--
+-- Be careful when composing functions to apply them after the already present,
+-- to preserve the left-to-right semantics of adding the options
 class ReifySettingsOptions a where
     reifyS :: Proxy a -> RonSettings -> RonSettings
 
@@ -89,6 +100,13 @@ data SkipSingleConstructor
 -- | @skipSingleConstructor .~ False@
 data NoSkipSingleConstructor
 
+-- | Typeclass for you to implement your own symmetric options. Here's how
+-- 'ImplicitSome' uses it
+--
+-- @
+--      instance ReifyFlagOptions ImplicitSome where
+--          reifyF Proxy flags = flags { implicitSome = True }
+-- @
 class ReifyFlagOptions a where
     reifyF :: Proxy a -> RonFlags -> RonFlags
 

@@ -1,10 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
+-- | Ron routines for serialization
 module Data.Ron.Serialize
-    ( CommaStyle (..)
-    , SerializeSettings (..)
-    , haskellStyle, rustStyle, compactStyle
-    , encode, encodeFile
+    ( encode, encodeFile
     , dumps, dumpFile
+    -- * Style options
+    , haskellStyle, rustStyle, compactStyle
+    , SerializeSettings (..)
+    , CommaStyle (..)
+    -- * Low-level builders
     , ronBuilder
     ) where
 
@@ -59,7 +62,13 @@ data SerializeSettings = SerializeSettings
     -- ^ Useful for a compact representation
     } deriving (Eq, Show)
 
-haskellStyle, rustStyle, compactStyle :: SerializeSettings
+-- | Style similar to what is produced in haskell with stylish-haskell or
+-- hindent.
+--
+--      * Uses indent size of 4
+--
+--      * Unpacks top level values
+haskellStyle :: SerializeSettings
 haskellStyle = SerializeSettings
     { commaStyle = CommaLeading
     , indent = 4
@@ -69,6 +78,9 @@ haskellStyle = SerializeSettings
     , closeBracketOnSameLine = False
     , spaceAfterColon = True
     }
+
+-- | Style similar to what is produced by rustfmt, or by ron-rs itself
+rustStyle :: SerializeSettings
 rustStyle = SerializeSettings
     { commaStyle = CommaTrailing
     , indent = 4
@@ -78,6 +90,10 @@ rustStyle = SerializeSettings
     , closeBracketOnSameLine = False
     , spaceAfterColon = True
     }
+
+-- | All whitespace is disabled. Does not unpack toplevel, so you can set that
+-- if you want an even compacter style
+compactStyle :: SerializeSettings
 compactStyle = SerializeSettings
     { commaStyle = CommaHistoric
     , indent = 0
