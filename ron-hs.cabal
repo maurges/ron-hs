@@ -15,6 +15,7 @@ build-type:     Simple
 
 library
   exposed-modules:
+      Data.Ron
       Data.Ron.Class
       Data.Ron.Class.Deriving
       Data.Ron.Class.Internal

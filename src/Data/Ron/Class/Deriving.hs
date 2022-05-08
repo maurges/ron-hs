@@ -4,6 +4,7 @@
 module Data.Ron.Class.Deriving
     ( RonWith (..)
     -- * Settings
+    , UseStrict
     , EncodeWith
     , DecodeWith
     , ConvertWith
@@ -29,9 +30,9 @@ import Data.Ron.Class
 --
 -- @
 --      data MyType = MyType {...}
---      deriving (Eq, Show, Generic)
---      deriving (ToRon, FromRon)
---          via RonWith '[FieldsDropPrefix, EncodeWith SkipSingleConstructor] MyType
+--          deriving (Eq, Show, Generic)
+--          deriving (ToRon, FromRon)
+--              via RonWith '[FieldsDropPrefix, EncodeWith SkipSingleConstructor] MyType
 -- @
 --
 -- The options are applied left to right, and the starting options are
