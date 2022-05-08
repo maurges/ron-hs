@@ -1,5 +1,5 @@
 name:                ron-hs
-version:             0.2.0
+version:             0.3.0
 license:             BSD3
 author:              "d86leader"
 maintainer:          "d86leader@mail.com"
@@ -43,6 +43,7 @@ tests:
     - QuickCheck
     - bytestring
     - containers
+    - directory
     - optics-core
     - optics-th
     - tasty

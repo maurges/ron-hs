@@ -43,7 +43,7 @@ type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
 
--- | Like '(<|>)' but collect errors from both sides
+-- | Like 'Control.Applicative.(<|>)' but collect errors from both sides
 (<<|>>) :: ParseResult a -> ParseResult a -> ParseResult a
 pa <<|>> pb = case pa of
     Right a -> pure a
@@ -51,13 +51,45 @@ pa <<|>> pb = case pa of
         Right b -> pure b
         Left eb -> fail $ ea <> "; "<> eb
 
--- | A class of values that can be encoded to RON format
+-- | A class of values that can be encoded to RON format.
+--
+-- The default implementation uses generic encoding with 'laxRonSettings'. You
+-- can use other settings like this:
+--
+-- @
+--      instance ToRon MyType where
+--          toRon = toRonGeneric strictRonSettings
+--              { encodeFlags = RonFlags
+--                  { implicitSome = True
+--                  , skipSingleConstructor = True
+--                  }
+--              }
+-- @
+--
+-- Or instead of implementing it by hand you can use @DerivingVia@ extension
+-- and derive via 'Data.Ron.Class.Deriving.RonWith'.
 class ToRon a where
     toRon :: a -> Value
     default toRon :: (Generic a, GToRon (Rep a)) => a -> Value
     toRon = toRonDefault
 
--- | A class of values that can be from RON format
+-- | A class of values that can be restored from RON format
+--
+-- The default implementation uses generic encoding with 'laxRonSettings'. You
+-- can use other settings like this:
+--
+-- @
+--      instance FromRon MyType where
+--          fromRon = fromRonGeneric strictRonSettings
+--              { decodeFlags = RonFlags
+--                  { implicitSome = True
+--                  , skipSingleConstructor = True
+--                  }
+--              }
+-- @
+--
+-- Or instead of implementing it by hand you can use @DerivingVia@ extension
+-- and derive via 'Data.Ron.Class.Deriving.RonWith'.
 class FromRon a where
     fromRon :: Value -> ParseResult a
     default fromRon :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
@@ -257,7 +289,10 @@ newtype Context = Context
     { isSingleConstructor :: Bool
     } deriving (Eq, Show)
 
--- | Encode ron using 'Generic' instance and provided 'RonSettings'
+-- | Encode ron using 'Generic' instance and provided 'RonSettings'.
+--
+-- With generic encoding sums are turned into sums, records into records, and
+-- multi-param constructors into tuples.
 toRonGeneric :: (Generic a, GToRon (Rep a)) => RonSettings -> a -> Value
 toRonGeneric conf = toRonG conf . from
 
@@ -389,6 +424,9 @@ instance ToRon c => GToRonRec (K1 R c) where
 
 
 -- | Decode ron using 'Generic' instance and provided 'RonSettings'
+--
+-- With generic encoding sums are turned into sums, records into records, and
+-- multi-param constructors into tuples.
 fromRonGeneric
     :: (Generic a, GFromRon (Rep a)) => RonSettings -> Value -> ParseResult a
 fromRonGeneric conf = fmap to . fromRonG conf

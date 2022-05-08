@@ -35,13 +35,15 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- Map -> HashMap, List of tuples, Vector of tuples (especially for record)
 -- Vector -> List (for tuples)
 -- NonEmpty for tuple and record? Or unify unit with both of them
+--
 -- | A RON value represented in haskell. This is the intermediate
 -- representation between string and your own type.
 --
 -- @()@ is represented as @Unit ""@
 --
 -- 'Tuple' and 'Record' contents are not empty when parsed, since the empty
--- contents denote a 'Unit'
+-- contents denote a 'Unit'. Attempting to dump an empty tuple or record may
+-- produce unexpected results, so don't do that either.
 data Value
     = Integral !Integer
     | Floating !Scientific

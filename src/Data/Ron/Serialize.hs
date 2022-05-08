@@ -1,10 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
+-- | Ron routines for serialization
 module Data.Ron.Serialize
-    ( CommaStyle (..)
-    , SerializeSettins (..)
-    , haskellStyle, rustStyle, compactStyle
-    , encode, encodeFile
+    ( encode, encodeFile
     , dumps, dumpFile
+    -- * Style options
+    , haskellStyle, rustStyle, compactStyle
+    , SerializeSettings (..)
+    , CommaStyle (..)
+    -- * Low-level builders
     , ronBuilder
     ) where
 
@@ -18,7 +21,7 @@ import Data.Text.Encoding (encodeUtf8, encodeUtf8BuilderEscaped)
 import Data.Ron.Class (ToRon (toRon))
 import Data.Word (Word8)
 import Test.QuickCheck (Arbitrary, arbitrary, chooseEnum)
-import System.IO (openFile, IOMode (WriteMode), hSetBinaryMode, hSetBuffering, BufferMode (BlockBuffering))
+import System.IO (IOMode (WriteMode), hSetBinaryMode, hSetBuffering, BufferMode (BlockBuffering), withFile)
 
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Builder.Prim as Prim
@@ -38,7 +41,7 @@ data CommaStyle
     -- ^ Haskell style, comma at line start
     deriving (Eq, Show, Bounded, Enum)
 
-data SerializeSettins = SerializeSettins
+data SerializeSettings = SerializeSettings
     { commaStyle :: !CommaStyle
     , indent :: !Int
     -- ^ Setting this to zero also disables line breaks
@@ -59,8 +62,14 @@ data SerializeSettins = SerializeSettins
     -- ^ Useful for a compact representation
     } deriving (Eq, Show)
 
-haskellStyle, rustStyle, compactStyle :: SerializeSettins
-haskellStyle = SerializeSettins
+-- | Style similar to what is produced in haskell with stylish-haskell or
+-- hindent.
+--
+--      * Uses indent size of 4
+--
+--      * Unpacks top level values
+haskellStyle :: SerializeSettings
+haskellStyle = SerializeSettings
     { commaStyle = CommaLeading
     , indent = 4
     , singleElementSpecial = True
@@ -69,7 +78,10 @@ haskellStyle = SerializeSettins
     , closeBracketOnSameLine = False
     , spaceAfterColon = True
     }
-rustStyle = SerializeSettins
+
+-- | Style similar to what is produced by rustfmt, or by ron-rs itself
+rustStyle :: SerializeSettings
+rustStyle = SerializeSettings
     { commaStyle = CommaTrailing
     , indent = 4
     , singleElementSpecial = True
@@ -78,7 +90,11 @@ rustStyle = SerializeSettins
     , closeBracketOnSameLine = False
     , spaceAfterColon = True
     }
-compactStyle = SerializeSettins
+
+-- | All whitespace is disabled. Does not unpack toplevel, so you can set that
+-- if you want an even compacter style
+compactStyle :: SerializeSettings
+compactStyle = SerializeSettings
     { commaStyle = CommaHistoric
     , indent = 0
     , singleElementSpecial = True
@@ -90,32 +106,31 @@ compactStyle = SerializeSettins
 
 -- | Serialize a value to a lazy bytestring. For settings you can use
 -- 'haskellStyle' or 'rustStyle' or 'compactStyle'
-encode :: ToRon a => SerializeSettins -> a -> Lazy.ByteString
+encode :: ToRon a => SerializeSettings -> a -> Lazy.ByteString
 encode settings = dumps settings . toRon
 
 -- | Serialize a value into a file. For settings you can use
 -- 'haskellStyle' or 'rustStyle' or 'compactStyle'
-encodeFile :: ToRon a => SerializeSettins -> FilePath -> a -> IO ()
+encodeFile :: ToRon a => SerializeSettings -> FilePath -> a -> IO ()
 encodeFile settings path = dumpFile settings path . toRon
 
 -- | Serialize a RON value to a lazy bytestring. You probably want to use
 -- 'encode' instead
-dumps :: SerializeSettins -> Value -> Lazy.ByteString
+dumps :: SerializeSettings -> Value -> Lazy.ByteString
 dumps settings = toLazyByteString . ronBuilder settings
 
 -- | Serialize a RON value into a file. You probably want to use 'encodeFile'
 -- instead
-dumpFile :: SerializeSettins -> FilePath -> Value -> IO ()
-dumpFile settings path value = do
-    handle <- openFile path WriteMode
+dumpFile :: SerializeSettings -> FilePath -> Value -> IO ()
+dumpFile settings path value = withFile path WriteMode $ \handle -> do
     -- recommended in builder package
     hSetBinaryMode handle True
     hSetBuffering handle $ BlockBuffering Nothing -- hmm
     hPutBuilder handle $ ronBuilder settings value
 
 -- | The builder producing the serialized representation
-ronBuilder :: SerializeSettins -> Value -> Builder
-ronBuilder SerializeSettins {..} = toplevel where
+ronBuilder :: SerializeSettings -> Value -> Builder
+ronBuilder SerializeSettings {..} = toplevel where
     deeper !lvl = lvl + indent
     nl  = if indent == 0 then mempty else char7 '\n'
     shift lvl = string7 $ replicate lvl ' '
@@ -290,8 +305,8 @@ encodeChar = primBounded escape
 instance Arbitrary CommaStyle where
     arbitrary = chooseEnum (minBound, maxBound)
 
-instance Arbitrary SerializeSettins where
-    arbitrary = SerializeSettins
+instance Arbitrary SerializeSettings where
+    arbitrary = SerializeSettings
         <$> arbitrary
         <*> arbitrary
         <*> arbitrary

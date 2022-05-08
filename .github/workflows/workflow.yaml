@@ -1,0 +1,41 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches: [ "master" ]
+  push:
+    branches: [ "master" ]
+    tags: [ "*.*.*" ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        resolver: ["nightly-2022-05-05", "lts-19.6", "lts-18.28"]
+        # TODO: lts-16.31 fails because of missing TH.Lift on Scientific
+        # TODO: lts-14.27 fails because of missing optics package
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v1
+
+      - name: 🧰 Setup Stack
+        if: matrix.os != 'windows-latest'
+        run: |
+          [ -x "$(command -v stack)" ] && exit 0 #stack already exists
+          curl -sSL https://get.haskellstack.org/ | sh
+
+      - name: ⛓ Install dependencies
+        run: |
+          stack --resolver ${{ matrix.resolver }} --no-terminal --install-ghc build --test --bench --only-dependencies
+
+      - name: 🔨 Build
+        run: |
+          stack --resolver ${{ matrix.resolver }} --no-terminal build --test --no-run-tests --bench --no-run-benchmarks --haddock --no-haddock-deps
+
+      - name: 🧪 Test
+        run: |
+          stack --resolver ${{ matrix.resolver }} test --test-arguments "--quickcheck-max-size 30"
