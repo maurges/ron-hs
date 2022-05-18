@@ -8,7 +8,7 @@ module Data.Ron.Deserialize
     -- * Exceptions
     , ParseError, DecodeError
     -- * Parsers
-    , toplevel, value
+    , document, toplevel, value
     ) where
 
 import Control.Applicative ((<|>), liftA2)
@@ -77,14 +77,14 @@ decodeFile path = loadFile path >>= pure . fromRon >>= \case
 
 -- | Parse a 'ByteString' to a 'Value'. You probably want 'decode' instead
 loads :: ByteString -> Either String Value
-loads = parseOnly (ws *> toplevel <* (takeWhile (const True) >>= \case {s | ByteString.null s -> pure (); s -> fail $ "Expected eof, got" <> show s}))
+loads = parseOnly document
 
 -- | Parse a lazy 'Lazy.ByteString' to a 'Value'. You probably want
 -- 'decodeLazy' instead
 loadsLazy :: Lazy.ByteString -> Either String Value
 loadsLazy str = case Lazy.toChunks str of
     [] -> Left "Empty input"
-    s:ss -> go ss $! parse toplevel s
+    s:ss -> go ss $! parse document s
   where
     -- since toplevel requires eof after end, _rest should always be nothing
     go _ (Fail _rest contexts message) = Left $
@@ -113,6 +113,12 @@ loadFile' path = loadsLazy <$> Lazy.readFile path
 
 --- Parsers
 
+-- | Like toplevel that also consumes whitespace before it, and expects eof after itself
+document :: Parser Value
+document = ws *> toplevel <* do
+    peekChar >>= \case
+        Nothing -> pure ()
+        Just s -> fail $ "Expected eof, got data starting with " <> show s
 
 -- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
 -- 'value'. The first two are ron-hs extensions
