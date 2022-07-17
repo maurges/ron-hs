@@ -3,12 +3,13 @@ module File
     ) where
 
 import Control.Exception (bracket)
+import Data.Ron.Deserialize (decodeFile, loadFile)
 import Data.Ron.Serialize (encodeFile, haskellStyle)
-import Data.Ron.Deserialize (decodeFile)
-import Test.Tasty.HUnit (testCase, (@?=))
-import Test.Tasty (testGroup)
+import Data.Ron.Value.Internal (similar')
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.IO (hClose, openTempFile)
+import Test.Tasty (testGroup)
+import Test.Tasty.HUnit (testCase, (@?=), (@?))
 
 withTempFile :: String -> (FilePath -> IO a) -> IO a
 withTempFile template callback = do
@@ -28,6 +29,11 @@ writeAndRead = withTempFile "ron" $ \path -> do
     value' <- decodeFile path
     value @?= value'
 
+readExample = do
+    val <- loadFile "example.ron"
+    val `similar'` val @? "Value is not similar to itself"
+
 fileTests = testGroup "file tests"
     [ testCase "write and read to file" writeAndRead
+    , testCase "read example file" readExample
     ]
