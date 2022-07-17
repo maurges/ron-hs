@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           ron-hs
-version:        0.2.0
+version:        0.3.0
 synopsis:       RON format implementation in haskell
 author:         d86leader
 maintainer:     d86leader@mail.com
