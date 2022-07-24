@@ -19,14 +19,14 @@ import Data.Map.Strict (Map)
 import Data.Proxy (Proxy (..))
 import Data.Ron.Class.Internal (productSize, ProductSize)
 import Data.Scientific (fromFloatDigits, toRealFloat, Scientific)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Data.Vector (Vector)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics
     ( Generic (Rep, from, to), V1, U1 (..), (:+:)(..), (:*:)(..)
     , K1 (..), M1 (..)
     , C, S, D, R
-    , Constructor (conName, conIsRecord), Selector (selName)
+    , Constructor (conName, conIsRecord), Selector (selName), Datatype (datatypeName)
     )
 
 import qualified Data.Map.Strict as Map
@@ -285,8 +285,14 @@ data RonSettings = RonSettings
     , encodeFlags :: !RonFlags
     }
 
-newtype Context = Context
+data SumContext = SumContext
     { isSingleConstructor :: Bool
+    , sumTypeName :: String
+    } deriving (Eq, Show)
+
+data ProductContext = ProductContext
+    { prodTypeName :: String
+    , constructorName :: String
     } deriving (Eq, Show)
 
 -- | Encode ron using 'Generic' instance and provided 'RonSettings'.
@@ -337,17 +343,18 @@ class GToRon f where
     toRonG :: RonSettings -> f a -> Value
 
 class GToRonSum f where
-    toRonSum :: RonSettings -> Context -> f a -> Value
+    toRonSum :: RonSettings -> SumContext -> f a -> Value
 class GToRonProduct f where
     toRonProduct
-        :: RonSettings -> f a -> Either (Vector Value) (Map Text Value)
+        :: RonSettings -> ProductContext -> f a -> Either (Vector Value) (Map Text Value)
 class GToRonRec f where
     toRonRec :: RonSettings -> f a -> Value
 
-instance GToRonSum f => GToRon (M1 D _d f) where
+instance (Datatype d, GToRonSum f) => GToRon (M1 D d f) where
     toRonG conf (M1 x) = toRonSum conf cont x
-        where cont = Context
+        where cont = SumContext
                 { isSingleConstructor = True
+                , sumTypeName = datatypeName (undefined :: t d f a)
                 }
 
 instance GToRonSum V1 where
@@ -360,7 +367,11 @@ instance (Constructor c, GToRonProduct f) => GToRonSum (M1 C c f) where
                         && skipSingleConstructor (encodeFlags conf)
                     then ""
                     else pack . conName $ con
-            xs = toRonProduct conf x
+            cont' = ProductContext
+                { prodTypeName = sumTypeName cont
+                , constructorName = unpack name
+                }
+            xs = toRonProduct conf cont' x
         in case (xs, conIsRecord con) of
             (Right xs', True) -> Record name xs'
             (Left xs', False) -> Tuple name xs'
@@ -377,11 +388,11 @@ instance (GToRonSum fl, GToRonSum fr) => GToRonSum (fl :+: fr) where
                 {isSingleConstructor = False}
 
 instance GToRonProduct U1 where
-    toRonProduct _ U1 = Left Vector.empty
+    toRonProduct _ _ U1 = Left Vector.empty
 
 instance {-# OVERLAPPING #-} (Selector s, ToRon c)
     => GToRonProduct (M1 S s (K1 R (Maybe c))) where
-    toRonProduct conf (M1 (K1 x)) =
+    toRonProduct conf _cont (M1 (K1 x)) =
         let field = selName (undefined :: t s (K1 R (Maybe c)) a)
         in case x of
             Nothing | implicitSome . encodeFlags $ conf ->
@@ -402,7 +413,7 @@ instance {-# OVERLAPPING #-} (Selector s, ToRon c)
                     in Right . Map.singleton field' $ toRon x'
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
-    toRonProduct conf (M1 x) =
+    toRonProduct conf _cont (M1 x) =
         let field = selName (undefined :: t s f a)
             value = toRonRec conf x
         in case field of
@@ -413,8 +424,8 @@ instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
 
 instance (GToRonProduct pl, GToRonProduct pr)
     => GToRonProduct (pl :*: pr) where
-    toRonProduct conf (x :*: y) =
-        case (toRonProduct conf x, toRonProduct conf y) of
+    toRonProduct conf cont (x :*: y) =
+        case (toRonProduct conf cont x, toRonProduct conf cont y) of
             (Left xs, Left ys) -> Left $ xs <> ys
             (Right xs, Right ys) -> Right $ Map.union xs ys
             _ -> error "Incompatible product branches"
@@ -440,40 +451,50 @@ class GFromRon f where
     fromRonG :: RonSettings -> Value -> ParseResult (f a)
 
 class GFromRonSum f where
-    fromRonSum :: RonSettings -> Context -> Value -> ParseResult (f a)
+    fromRonSum :: RonSettings -> SumContext -> Value -> ParseResult (f a)
 class GFromRonProduct f where
     fromRonProduct
         :: RonSettings
+        -> ProductContext
         -> Either (Vector Value) (Map Text Value)
         -> ParseResult (f a)
 class GFromRonRec f where
     fromRonRec :: RonSettings -> Value -> ParseResult (f a)
 
-instance GFromRonSum f => GFromRon (M1 D _d f) where
+instance (Datatype d, GFromRonSum f) => GFromRon (M1 D d f) where
     fromRonG conf x = M1 <$> fromRonSum conf cont x
-        where cont = Context
+        where cont = SumContext
                 { isSingleConstructor = True
+                , sumTypeName = datatypeName (undefined :: t d f a)
                 }
 
 instance (Constructor c, GFromRonProduct f) => GFromRonSum (M1 C c f) where
     fromRonSum conf cont x =
-        let con = undefined :: t c f a
-            name = pack . conName $ con
-        in M1 <$> case x of
+        M1 <$> case x of
             Unit n | name `matches` n
-                        -> fromRonProduct conf $ Left Vector.empty
-                   | otherwise -> fail "Incorrect name"
-            Tuple n xs | name `matches` n -> fromRonProduct conf $ Left xs
-                       | otherwise -> fail "Incorrect name"
-            Record n xs | name `matches` n -> fromRonProduct conf $ Right xs
-                        | otherwise -> fail "Incorrect name"
-            _ -> fail "Incorrect value type"
+                        -> fromRonProduct conf cont' $ Left Vector.empty
+                   | otherwise -> fail incorrectConstructor
+            Tuple n xs | name `matches` n -> fromRonProduct conf cont' $ Left xs
+                       | otherwise -> fail incorrectConstructor
+            Record n xs | name `matches` n -> fromRonProduct conf cont' $ Right xs
+                        | otherwise -> fail incorrectConstructor
+            _ -> fail $ "Incorrect value for type " <> sumTypeName cont
         where
+            con = undefined :: t c f a
+            name = pack . conName $ con
             matches target ron =
                 ron == target
                 || ron == ""
                     && isSingleConstructor cont
                     && skipSingleConstructor (decodeFlags conf)
+            incorrectConstructor = "Incorrect constructor " <> constructorName <> " for type " <> sumTypeName cont
+            constructorName = case unpack name of
+                "" -> "<UNNAMED>"
+                n -> n
+            cont' = ProductContext
+                { prodTypeName = sumTypeName cont
+                , constructorName
+                }
 
 instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
     fromRonSum conf cont x =
@@ -482,28 +503,29 @@ instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
                 { isSingleConstructor = False }
 
 instance GFromRonProduct U1 where
-    fromRonProduct _ (Left xs) | Vector.null xs  = pure U1
-    fromRonProduct _ (Right xs) | Map.null xs  = pure U1
-    fromRonProduct _ _ = fail "Expected empty structure"
+    fromRonProduct _ _ (Left xs) | Vector.null xs  = pure U1
+    fromRonProduct _ _ (Right xs) | Map.null xs  = pure U1
+    fromRonProduct _ c _ = fail $ constructorName c <> ": expected empty structure"
 
 instance {-# OVERLAPPING #-} (Selector s, FromRon c)
     => GFromRonProduct (M1 S s (K1 R (Maybe c))) where
-    fromRonProduct conf xs =
+    fromRonProduct conf cont xs =
         let field =
                 pack . fieldModifier conf $
                     selName (undefined :: t s (K1 R (Maybe c)) a)
+            ProductContext {constructorName} = cont
         in case xs of
             Left xs' -> case Vector.uncons xs' of
-                Nothing -> fail "Not enough elements in tuple"
+                Nothing -> fail $ "Not enough elements in tuple " <> constructorName
                 Just (x, xs'')
                     | Vector.null xs'' -> M1 <$>
                         let tryUnwrapped
                                 | implicitSome . decodeFlags $ conf =
                                     K1 . Just <$> fromRon x
                                 | otherwise =
-                                    fail "Not using decodeImplicitSome"
+                                    fail $ constructorName <> ": not using decodeImplicitSome"
                         in fromRonRec conf x <<|>> tryUnwrapped
-                    | otherwise -> fail "Trailing members in tuple"
+                    | otherwise -> fail $ "Trailing members in tuple " <> constructorName
             Right xs'
                 | implicitSome . decodeFlags $ conf ->
                     case Map.lookup field xs' of
@@ -513,32 +535,33 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
                                 wrapped = M1 <$> fromRonRec conf x
                             in wrapped <<|>> unwrapped
                 | otherwise -> case Map.lookup field xs' of
-                    Nothing -> fail "Field not present in record"
+                    Nothing -> fail $ "Field " <> unpack field <> " not present in record " <> constructorName
                     Just x -> M1 <$> fromRonRec conf x
 
 instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
-    fromRonProduct conf xs =
+    fromRonProduct conf cont xs =
         let field = pack . fieldModifier conf $ selName (undefined :: t s f a)
+            ProductContext {constructorName} = cont
         in case xs of
             Left xs' -> case Vector.uncons xs' of
-                Nothing -> fail "Not enough elements in tuple"
+                Nothing -> fail $ "Not enough elements in tuple " <> constructorName
                 Just (x, xs'') | Vector.null xs'' -> M1 <$> fromRonRec conf x
-                               | otherwise -> fail "Trailing members in tuple"
+                               | otherwise -> fail $ "Trailing members in tuple " <> constructorName
             Right xs' -> case Map.lookup field xs' of
-                Nothing -> fail "Field not present in record"
+                Nothing -> fail $ "Field " <> unpack field <> " not present in record " <> constructorName
                 Just x -> M1 <$> fromRonRec conf x
 
 instance (ProductSize pl, GFromRonProduct pl, GFromRonProduct pr)
     => GFromRonProduct (pl :*: pr) where
-    fromRonProduct conf (Left xs) =
+    fromRonProduct conf cont (Left xs) =
         let sizel = productSize (Proxy @pl)
             (xsl, xsr) = Vector.splitAt sizel xs
         in (:*:)
-            <$> fromRonProduct conf (Left xsl)
-            <*> fromRonProduct conf (Left xsr)
-    fromRonProduct conf xs = (:*:)
-        <$> fromRonProduct conf xs
-        <*> fromRonProduct conf xs
+            <$> fromRonProduct conf cont (Left xsl)
+            <*> fromRonProduct conf cont (Left xsr)
+    fromRonProduct conf cont xs = (:*:)
+        <$> fromRonProduct conf cont xs
+        <*> fromRonProduct conf cont xs
 
 instance FromRon c => GFromRonRec (K1 R c) where
     fromRonRec _ x = K1 <$> fromRon x
