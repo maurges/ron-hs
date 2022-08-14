@@ -1,3 +1,7 @@
+[]
+- Improved error messages with enclosing structure info (but no line info)
+- Bugfixes in parsing
+
 [0.3.1]
 - Fix different behaviours for different load functions
 

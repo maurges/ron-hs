@@ -134,7 +134,7 @@ toplevel = peekChar' >>= \case
             ws
             peekChar >>= \case
                 Just '(' -> recordOrTuple ident >>= toplevelList
-                Just ':' -> toplevelRecord ident
+                Just ':' -> skip1 *> ws *> toplevelRecord ident
                 _ -> ws *> pure (Unit ident)
     c | startsIdentifier c -> do
             ident <- decodeUtf8 <$> takeWhile isKeyword

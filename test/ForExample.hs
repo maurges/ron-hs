@@ -46,18 +46,6 @@ example1 = unlines . map encodeUtf8 $
     , "    )"
     , ")"
     ]
-
-example2 = unlines
-    [ "\"ron-rs document\","
-    , "\"with a toplevel list\","
-    , "\"denoted by just elements with commas\","
-    ]
-
-example3 = unlines
-    [ "field1: SomeValue,"
-    , "field2: \"other value\""
-    ]
-
 example1_ron = Record "TopLevelRecord"
     [ ( "field", Tuple "Compound"
         [ String "this"
@@ -92,19 +80,35 @@ example1_ron = Record "TopLevelRecord"
       )
     ]
 
+example2 = unlines
+    [ "\"ron-rs document\","
+    , "\"with a toplevel list\","
+    , "\"denoted by just elements with commas\","
+    ]
 example2_ron = List
     [ String "ron-rs document"
     , String "with a toplevel list"
     , String "denoted by just elements with commas"
     ]
 
+example3 = unlines
+    [ "field1: SomeValue,"
+    , "field2: \"other value\","
+    , "rstarting_field: 123,"
+    ]
 example3_ron = Record ""
     [ ("field1", Unit "SomeValue")
     , ("field2", String "other value")
+    , ("rstarting_field", Integral 123)
     ]
+
+example4 = "r_at_start: Foobar(1),"
+example4_ron = Record ""
+    [ ("r_at_start", Tuple "Foobar" [Integral 1]) ]
 
 exampleTests = testGroup "golden decodes"
     [ testCase "example1" $ loads example1 @?= Right example1_ron
     , testCase "example2" $ loads example2 @?= Right example2_ron
     , testCase "example3" $ loads example3 @?= Right example3_ron
+    , testCase "example4" $ loads example4 @?= Right example4_ron
     ]
