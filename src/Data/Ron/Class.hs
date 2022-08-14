@@ -12,14 +12,19 @@ module Data.Ron.Class
     , GToRon, GFromRon
     ) where
 
-import Control.Arrow ((***))
 import Control.Applicative (liftA2)
+import Control.Arrow ((***))
+import Data.ByteString (ByteString)
+import Data.Complex (Complex ((:+)))
+import Data.Foldable (toList)
 import Data.Int (Int8, Int16, Int32, Int64)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict (Map)
 import Data.Proxy (Proxy (..))
 import Data.Ron.Class.Internal (productSize, ProductSize)
 import Data.Scientific (fromFloatDigits, toRealFloat, Scientific)
 import Data.Text (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Vector (Vector)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics
@@ -29,7 +34,10 @@ import GHC.Generics
     , Constructor (conName, conIsRecord), Selector (selName), Datatype (datatypeName)
     )
 
+import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value
@@ -42,6 +50,10 @@ import Prelude hiding (fail)
 type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
+
+guard :: String -> Bool -> ParseResult ()
+guard _ True = pure ()
+guard msg False = fail msg
 
 -- | Like 'Control.Applicative.(<|>)' but collect errors from both sides
 (<<|>>) :: ParseResult a -> ParseResult a -> ParseResult a
@@ -95,55 +107,63 @@ class FromRon a where
     default fromRon :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
     fromRon = fromRonDefault
 
+intInRange :: forall a. (Bounded a, Num a, Integral a) => Integer -> ParseResult a
+intInRange i
+    | i >= minVal && i <= maxVal  = pure . fromInteger $ i
+    | otherwise  = fail $ "Value " <> show i <> " is not in valid range"
+    where
+        minVal = toInteger (minBound @a)
+        maxVal = toInteger (maxBound @a)
+
 instance ToRon Int where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int8 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int8 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int16 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int16 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int32 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int32 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int64 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int64 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word8 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word8 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word16 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word16 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word32 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word32 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word64 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word64 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Integer where
     toRon = Integral
@@ -154,6 +174,7 @@ instance FromRon Integer where
 instance ToRon Scientific where
     toRon = Floating
 instance FromRon Scientific where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure x
     fromRon _ = fail "Not a floating"
 instance ToRon Double where
@@ -162,6 +183,7 @@ instance ToRon Double where
         | isInfinite x = Unit "inf"
         | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Double where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure . toRealFloat $ x
     fromRon (Unit "inf") = pure $! read "Infinity"
     fromRon (Unit "NaN") = pure $! read "NaN"
@@ -172,10 +194,23 @@ instance ToRon Float where
         | isInfinite x = Unit "inf"
         | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Float where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure . toRealFloat $ x
     fromRon (Unit "inf") = pure $! read "Infinity"
     fromRon (Unit "NaN") = pure $! read "NaN"
     fromRon _ = fail "Not a floating"
+
+instance (ToRon a) => ToRon (Complex a) where
+    toRon (r :+ im) = Tuple "Complex" (Vector.fromList [toRon r, toRon im])
+instance (Num a, FromRon a) => FromRon (Complex a) where
+    fromRon v@(Integral _) = (:+ 0) <$> fromRon v
+    fromRon v@(Floating _) = (:+ 0) <$> fromRon v
+    fromRon (Tuple name vals) = do
+        guard "Incorrect Complex tuple name" $ name == "" || name == "Complex"
+        case Vector.toList vals of
+            [r, im] -> liftA2 (:+) (fromRon r) (fromRon im)
+            _ -> fail "Incorrect amount of values in complex coordinates"
+    fromRon _ = fail "Incorrect Complex value"
 
 instance ToRon Char where
     toRon = Char
@@ -188,6 +223,16 @@ instance ToRon Text where
 instance FromRon Text where
     fromRon (String x) = pure x
     fromRon _ = fail "Not text"
+
+instance ToRon ByteString where
+    toRon = List . Vector.fromList . map (Integral . toInteger) . BS.unpack
+instance FromRon ByteString where
+    fromRon (List bytes) = fmap BS.pack . traverse asWord8 . Vector.toList $ bytes
+        where
+            asWord8 (Integral x) = intInRange x
+            asWord8 _ = fail "Not a byte in list"
+    fromRon (String s) = pure . encodeUtf8 $ s
+    fromRon _ = fail "Not a bytestring"
 
 instance ToRon Bool where
     toRon True = Unit "true"
@@ -209,6 +254,16 @@ instance (ToRon a) => ToRon [a] where
 instance (FromRon a) => FromRon [a] where
     fromRon (List xs) = Vector.toList <$> traverse fromRon xs
     fromRon _ = fail "Not a list"
+instance {-# OVERLAPPING #-} ToRon [Char] where
+    toRon = String . pack
+instance {-# OVERLAPPING #-} FromRon [Char] where
+    fromRon = fmap unpack . fromRon
+instance (ToRon a) => ToRon (NonEmpty a) where
+    toRon (x:|xs) = toRon $ x:xs
+instance (FromRon a) => FromRon (NonEmpty a) where
+    fromRon v = fromRon v >>= \case
+        [] -> fail "Expected non-empty list"
+        x:xs -> pure $ x:|xs
 
 instance (ToRon k, ToRon v) => ToRon (Map.Map k v) where
     toRon = Map . Map.fromList . map (toRon *** toRon) . Map.toAscList
@@ -217,6 +272,15 @@ instance (FromRon k, FromRon v, Ord k) => FromRon (Map.Map k v) where
         traverse tupleFromRon (Map.toAscList xs)
         where tupleFromRon (a, b) = liftA2 (,) (fromRon a) (fromRon b)
     fromRon _ = fail "Not a map"
+
+instance (ToRon a) => ToRon (Set.Set a) where
+    toRon = toRon . Set.toAscList
+instance (FromRon a, Ord a) => FromRon (Set.Set a) where
+    fromRon = fmap Set.fromList . fromRon
+instance (ToRon a) => ToRon (Seq.Seq a) where
+    toRon = toRon . toList
+instance (FromRon a) => FromRon (Seq.Seq a) where
+    fromRon = fmap Seq.fromList . fromRon
 
 instance ToRon () where
     toRon () = Unit ""

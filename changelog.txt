@@ -1,4 +1,8 @@
 []
+- Add more instance for base and containers
+- Change String instance to resemble Text
+- Overflows in numeric decoding are now errors instead of being silently
+ignored
 - Improved error messages with enclosing structure info (but no line info)
 - Bugfixes in parsing
 
