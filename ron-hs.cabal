@@ -43,6 +43,7 @@ library
     , base
     , bytestring
     , containers
+    , deepseq
     , hashable
     , scientific
     , template-haskell
@@ -88,4 +89,32 @@ test-suite test
     , tasty-quickcheck
     , text
     , vector
+  default-language: Haskell2010
+
+benchmark bench
+  type: exitcode-stdio-1.0
+  main-is: Bench.hs
+  other-modules:
+      Escape
+      File
+      Paths_ron_hs
+  hs-source-dirs:
+      bench
+  default-extensions:
+      BangPatterns
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
+      ScopedTypeVariables
+      TypeApplications
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Werror=incomplete-patterns -Wno-all -Wdefault -Wincomplete-patterns -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , base16-bytestring
+    , bytestring
+    , criterion
+    , ron-hs
+    , text
   default-language: Haskell2010

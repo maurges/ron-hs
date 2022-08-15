@@ -27,6 +27,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Language.Haskell.TH.Syntax as TH
+import Control.DeepSeq (NFData (rnf))
 
 
 -- Alternatives:
@@ -186,3 +187,16 @@ arbPartition size = case compare size 1 of
             go !s xs = do
                 x <- choose (1, s)
                 go (s - 1) (x:xs)
+
+--- Deepseq
+
+instance NFData Value where
+    rnf (Integral x) = rnf x
+    rnf (Floating x) = rnf x
+    rnf (Char x) = rnf x
+    rnf (String x) = rnf x
+    rnf (List x) = rnf x
+    rnf (Map x) = rnf x
+    rnf (Unit n) = rnf n
+    rnf (Tuple n x) = rnf n `seq` rnf x
+    rnf (Record n x) = rnf n `seq` rnf x
