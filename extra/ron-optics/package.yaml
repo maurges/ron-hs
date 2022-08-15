@@ -1,0 +1,31 @@
+name:                ron-optics
+version:             0.1.0.0
+license:             BSD3
+author:              "d86leader"
+maintainer:          "d86leader@mail.com"
+synopsis:            Optics for RON values. Useful for making instances by hand
+
+ghc-options:
+- -Wall -Wcompat
+- -Werror=incomplete-patterns
+
+default-extensions:
+- BangPatterns
+- LambdaCase
+- MultiWayIf
+- NamedFieldPuns
+- OverloadedStrings
+- ScopedTypeVariables
+- TypeApplications
+- TypeOperators
+
+library:
+  source-dirs: src
+  dependencies:
+  - base
+  - ron-hs
+  - containers
+  - optics-core
+  - scientific
+  - text
+  - vector

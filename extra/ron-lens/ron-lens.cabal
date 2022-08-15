@@ -1,0 +1,40 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           ron-lens
+version:        0.1.0.0
+synopsis:       Lenses for RON values. Useful for making instances by hand
+author:         d86leader
+maintainer:     d86leader@mail.com
+license:        BSD3
+build-type:     Simple
+
+library
+  exposed-modules:
+      Data.Ron.Lens
+  other-modules:
+      Paths_ron_lens
+  hs-source-dirs:
+      src
+  default-extensions:
+      BangPatterns
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
+      ScopedTypeVariables
+      TypeApplications
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Werror=incomplete-patterns
+  build-depends:
+      base
+    , containers
+    , lens
+    , ron-hs
+    , scientific
+    , text
+    , vector
+  default-language: Haskell2010

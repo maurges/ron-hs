@@ -1,4 +1,6 @@
 resolver: lts-18.10
 packages:
 - .
+- extra/ron-lens
+- extra/ron-optics
 system-ghc: true
