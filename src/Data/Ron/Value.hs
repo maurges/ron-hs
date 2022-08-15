@@ -15,6 +15,7 @@ module Data.Ron.Value
     ) where
 
 import Control.Applicative (liftA2)
+import Control.DeepSeq (NFData (rnf))
 import Data.Hashable (Hashable, hashWithSalt)
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
@@ -27,7 +28,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Language.Haskell.TH.Syntax as TH
-import Control.DeepSeq (NFData (rnf))
 
 
 -- Alternatives:

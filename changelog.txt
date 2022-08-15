@@ -1,5 +1,5 @@
-[]
-- Add more instance for base and containers
+[0.3.2]
+- Add more instances for base and containers
 - Change String instance to resemble Text
 - Overflows in numeric decoding are now errors instead of being silently
 ignored
