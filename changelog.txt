@@ -1,3 +1,11 @@
+[0.3.2]
+- Add more instances for base and containers
+- Change String instance to resemble Text
+- Overflows in numeric decoding are now errors instead of being silently
+ignored
+- Improved error messages with enclosing structure info (but no line info)
+- Bugfixes in parsing
+
 [0.3.1]
 - Fix different behaviours for different load functions
 

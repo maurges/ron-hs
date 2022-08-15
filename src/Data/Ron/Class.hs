@@ -12,24 +12,32 @@ module Data.Ron.Class
     , GToRon, GFromRon
     ) where
 
-import Control.Arrow ((***))
 import Control.Applicative (liftA2)
+import Control.Arrow ((***))
+import Data.ByteString (ByteString)
+import Data.Complex (Complex ((:+)))
+import Data.Foldable (toList)
 import Data.Int (Int8, Int16, Int32, Int64)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict (Map)
 import Data.Proxy (Proxy (..))
 import Data.Ron.Class.Internal (productSize, ProductSize)
 import Data.Scientific (fromFloatDigits, toRealFloat, Scientific)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Vector (Vector)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics
     ( Generic (Rep, from, to), V1, U1 (..), (:+:)(..), (:*:)(..)
     , K1 (..), M1 (..)
     , C, S, D, R
-    , Constructor (conName, conIsRecord), Selector (selName)
+    , Constructor (conName, conIsRecord), Selector (selName), Datatype (datatypeName)
     )
 
+import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import qualified Data.Vector as Vector
 
 import Data.Ron.Value
@@ -42,6 +50,10 @@ import Prelude hiding (fail)
 type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
+
+guard :: String -> Bool -> ParseResult ()
+guard _ True = pure ()
+guard msg False = fail msg
 
 -- | Like 'Control.Applicative.(<|>)' but collect errors from both sides
 (<<|>>) :: ParseResult a -> ParseResult a -> ParseResult a
@@ -95,55 +107,63 @@ class FromRon a where
     default fromRon :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
     fromRon = fromRonDefault
 
+intInRange :: forall a. (Bounded a, Num a, Integral a) => Integer -> ParseResult a
+intInRange i
+    | i >= minVal && i <= maxVal  = pure . fromInteger $ i
+    | otherwise  = fail $ "Value " <> show i <> " is not in valid range"
+    where
+        minVal = toInteger (minBound @a)
+        maxVal = toInteger (maxBound @a)
+
 instance ToRon Int where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int8 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int8 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int16 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int16 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int32 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int32 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Int64 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Int64 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word8 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word8 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word16 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word16 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word32 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word32 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Word64 where
-    toRon = Integral . fromIntegral
+    toRon = Integral . toInteger
 instance FromRon Word64 where
-    fromRon (Integral i) = pure . fromIntegral $ i
+    fromRon (Integral i) = intInRange i
     fromRon _ = fail "Not an integer"
 instance ToRon Integer where
     toRon = Integral
@@ -154,6 +174,7 @@ instance FromRon Integer where
 instance ToRon Scientific where
     toRon = Floating
 instance FromRon Scientific where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure x
     fromRon _ = fail "Not a floating"
 instance ToRon Double where
@@ -162,6 +183,7 @@ instance ToRon Double where
         | isInfinite x = Unit "inf"
         | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Double where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure . toRealFloat $ x
     fromRon (Unit "inf") = pure $! read "Infinity"
     fromRon (Unit "NaN") = pure $! read "NaN"
@@ -172,10 +194,23 @@ instance ToRon Float where
         | isInfinite x = Unit "inf"
         | otherwise = Floating . fromFloatDigits $ x
 instance FromRon Float where
+    fromRon (Integral x) = pure . fromInteger $ x
     fromRon (Floating x) = pure . toRealFloat $ x
     fromRon (Unit "inf") = pure $! read "Infinity"
     fromRon (Unit "NaN") = pure $! read "NaN"
     fromRon _ = fail "Not a floating"
+
+instance (ToRon a) => ToRon (Complex a) where
+    toRon (r :+ im) = Tuple "Complex" (Vector.fromList [toRon r, toRon im])
+instance (Num a, FromRon a) => FromRon (Complex a) where
+    fromRon v@(Integral _) = (:+ 0) <$> fromRon v
+    fromRon v@(Floating _) = (:+ 0) <$> fromRon v
+    fromRon (Tuple name vals) = do
+        guard "Incorrect Complex tuple name" $ name == "" || name == "Complex"
+        case Vector.toList vals of
+            [r, im] -> liftA2 (:+) (fromRon r) (fromRon im)
+            _ -> fail "Incorrect amount of values in complex coordinates"
+    fromRon _ = fail "Incorrect Complex value"
 
 instance ToRon Char where
     toRon = Char
@@ -188,6 +223,16 @@ instance ToRon Text where
 instance FromRon Text where
     fromRon (String x) = pure x
     fromRon _ = fail "Not text"
+
+instance ToRon ByteString where
+    toRon = List . Vector.fromList . map (Integral . toInteger) . BS.unpack
+instance FromRon ByteString where
+    fromRon (List bytes) = fmap BS.pack . traverse asWord8 . Vector.toList $ bytes
+        where
+            asWord8 (Integral x) = intInRange x
+            asWord8 _ = fail "Not a byte in list"
+    fromRon (String s) = pure . encodeUtf8 $ s
+    fromRon _ = fail "Not a bytestring"
 
 instance ToRon Bool where
     toRon True = Unit "true"
@@ -209,6 +254,16 @@ instance (ToRon a) => ToRon [a] where
 instance (FromRon a) => FromRon [a] where
     fromRon (List xs) = Vector.toList <$> traverse fromRon xs
     fromRon _ = fail "Not a list"
+instance {-# OVERLAPPING #-} ToRon [Char] where
+    toRon = String . pack
+instance {-# OVERLAPPING #-} FromRon [Char] where
+    fromRon = fmap unpack . fromRon
+instance (ToRon a) => ToRon (NonEmpty a) where
+    toRon (x:|xs) = toRon $ x:xs
+instance (FromRon a) => FromRon (NonEmpty a) where
+    fromRon v = fromRon v >>= \case
+        [] -> fail "Expected non-empty list"
+        x:xs -> pure $ x:|xs
 
 instance (ToRon k, ToRon v) => ToRon (Map.Map k v) where
     toRon = Map . Map.fromList . map (toRon *** toRon) . Map.toAscList
@@ -217,6 +272,15 @@ instance (FromRon k, FromRon v, Ord k) => FromRon (Map.Map k v) where
         traverse tupleFromRon (Map.toAscList xs)
         where tupleFromRon (a, b) = liftA2 (,) (fromRon a) (fromRon b)
     fromRon _ = fail "Not a map"
+
+instance (ToRon a) => ToRon (Set.Set a) where
+    toRon = toRon . Set.toAscList
+instance (FromRon a, Ord a) => FromRon (Set.Set a) where
+    fromRon = fmap Set.fromList . fromRon
+instance (ToRon a) => ToRon (Seq.Seq a) where
+    toRon = toRon . toList
+instance (FromRon a) => FromRon (Seq.Seq a) where
+    fromRon = fmap Seq.fromList . fromRon
 
 instance ToRon () where
     toRon () = Unit ""
@@ -285,8 +349,14 @@ data RonSettings = RonSettings
     , encodeFlags :: !RonFlags
     }
 
-newtype Context = Context
+data SumContext = SumContext
     { isSingleConstructor :: Bool
+    , sumTypeName :: String
+    } deriving (Eq, Show)
+
+data ProductContext = ProductContext
+    { prodTypeName :: String
+    , constructorName :: String
     } deriving (Eq, Show)
 
 -- | Encode ron using 'Generic' instance and provided 'RonSettings'.
@@ -337,17 +407,18 @@ class GToRon f where
     toRonG :: RonSettings -> f a -> Value
 
 class GToRonSum f where
-    toRonSum :: RonSettings -> Context -> f a -> Value
+    toRonSum :: RonSettings -> SumContext -> f a -> Value
 class GToRonProduct f where
     toRonProduct
-        :: RonSettings -> f a -> Either (Vector Value) (Map Text Value)
+        :: RonSettings -> ProductContext -> f a -> Either (Vector Value) (Map Text Value)
 class GToRonRec f where
     toRonRec :: RonSettings -> f a -> Value
 
-instance GToRonSum f => GToRon (M1 D _d f) where
+instance (Datatype d, GToRonSum f) => GToRon (M1 D d f) where
     toRonG conf (M1 x) = toRonSum conf cont x
-        where cont = Context
+        where cont = SumContext
                 { isSingleConstructor = True
+                , sumTypeName = datatypeName (undefined :: t d f a)
                 }
 
 instance GToRonSum V1 where
@@ -360,7 +431,11 @@ instance (Constructor c, GToRonProduct f) => GToRonSum (M1 C c f) where
                         && skipSingleConstructor (encodeFlags conf)
                     then ""
                     else pack . conName $ con
-            xs = toRonProduct conf x
+            cont' = ProductContext
+                { prodTypeName = sumTypeName cont
+                , constructorName = unpack name
+                }
+            xs = toRonProduct conf cont' x
         in case (xs, conIsRecord con) of
             (Right xs', True) -> Record name xs'
             (Left xs', False) -> Tuple name xs'
@@ -377,11 +452,11 @@ instance (GToRonSum fl, GToRonSum fr) => GToRonSum (fl :+: fr) where
                 {isSingleConstructor = False}
 
 instance GToRonProduct U1 where
-    toRonProduct _ U1 = Left Vector.empty
+    toRonProduct _ _ U1 = Left Vector.empty
 
 instance {-# OVERLAPPING #-} (Selector s, ToRon c)
     => GToRonProduct (M1 S s (K1 R (Maybe c))) where
-    toRonProduct conf (M1 (K1 x)) =
+    toRonProduct conf _cont (M1 (K1 x)) =
         let field = selName (undefined :: t s (K1 R (Maybe c)) a)
         in case x of
             Nothing | implicitSome . encodeFlags $ conf ->
@@ -402,7 +477,7 @@ instance {-# OVERLAPPING #-} (Selector s, ToRon c)
                     in Right . Map.singleton field' $ toRon x'
 
 instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
-    toRonProduct conf (M1 x) =
+    toRonProduct conf _cont (M1 x) =
         let field = selName (undefined :: t s f a)
             value = toRonRec conf x
         in case field of
@@ -413,8 +488,8 @@ instance (Selector s, GToRonRec f) => GToRonProduct (M1 S s f) where
 
 instance (GToRonProduct pl, GToRonProduct pr)
     => GToRonProduct (pl :*: pr) where
-    toRonProduct conf (x :*: y) =
-        case (toRonProduct conf x, toRonProduct conf y) of
+    toRonProduct conf cont (x :*: y) =
+        case (toRonProduct conf cont x, toRonProduct conf cont y) of
             (Left xs, Left ys) -> Left $ xs <> ys
             (Right xs, Right ys) -> Right $ Map.union xs ys
             _ -> error "Incompatible product branches"
@@ -440,40 +515,50 @@ class GFromRon f where
     fromRonG :: RonSettings -> Value -> ParseResult (f a)
 
 class GFromRonSum f where
-    fromRonSum :: RonSettings -> Context -> Value -> ParseResult (f a)
+    fromRonSum :: RonSettings -> SumContext -> Value -> ParseResult (f a)
 class GFromRonProduct f where
     fromRonProduct
         :: RonSettings
+        -> ProductContext
         -> Either (Vector Value) (Map Text Value)
         -> ParseResult (f a)
 class GFromRonRec f where
     fromRonRec :: RonSettings -> Value -> ParseResult (f a)
 
-instance GFromRonSum f => GFromRon (M1 D _d f) where
+instance (Datatype d, GFromRonSum f) => GFromRon (M1 D d f) where
     fromRonG conf x = M1 <$> fromRonSum conf cont x
-        where cont = Context
+        where cont = SumContext
                 { isSingleConstructor = True
+                , sumTypeName = datatypeName (undefined :: t d f a)
                 }
 
 instance (Constructor c, GFromRonProduct f) => GFromRonSum (M1 C c f) where
     fromRonSum conf cont x =
-        let con = undefined :: t c f a
-            name = pack . conName $ con
-        in M1 <$> case x of
+        M1 <$> case x of
             Unit n | name `matches` n
-                        -> fromRonProduct conf $ Left Vector.empty
-                   | otherwise -> fail "Incorrect name"
-            Tuple n xs | name `matches` n -> fromRonProduct conf $ Left xs
-                       | otherwise -> fail "Incorrect name"
-            Record n xs | name `matches` n -> fromRonProduct conf $ Right xs
-                        | otherwise -> fail "Incorrect name"
-            _ -> fail "Incorrect value type"
+                        -> fromRonProduct conf cont' $ Left Vector.empty
+                   | otherwise -> fail incorrectConstructor
+            Tuple n xs | name `matches` n -> fromRonProduct conf cont' $ Left xs
+                       | otherwise -> fail incorrectConstructor
+            Record n xs | name `matches` n -> fromRonProduct conf cont' $ Right xs
+                        | otherwise -> fail incorrectConstructor
+            _ -> fail $ "Incorrect value for type " <> sumTypeName cont
         where
+            con = undefined :: t c f a
+            name = pack . conName $ con
             matches target ron =
                 ron == target
                 || ron == ""
                     && isSingleConstructor cont
                     && skipSingleConstructor (decodeFlags conf)
+            incorrectConstructor = "Incorrect constructor " <> constructorName <> " for type " <> sumTypeName cont
+            constructorName = case unpack name of
+                "" -> "<UNNAMED>"
+                n -> n
+            cont' = ProductContext
+                { prodTypeName = sumTypeName cont
+                , constructorName
+                }
 
 instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
     fromRonSum conf cont x =
@@ -482,28 +567,29 @@ instance (GFromRonSum fl, GFromRonSum fr) => GFromRonSum (fl :+: fr) where
                 { isSingleConstructor = False }
 
 instance GFromRonProduct U1 where
-    fromRonProduct _ (Left xs) | Vector.null xs  = pure U1
-    fromRonProduct _ (Right xs) | Map.null xs  = pure U1
-    fromRonProduct _ _ = fail "Expected empty structure"
+    fromRonProduct _ _ (Left xs) | Vector.null xs  = pure U1
+    fromRonProduct _ _ (Right xs) | Map.null xs  = pure U1
+    fromRonProduct _ c _ = fail $ constructorName c <> ": expected empty structure"
 
 instance {-# OVERLAPPING #-} (Selector s, FromRon c)
     => GFromRonProduct (M1 S s (K1 R (Maybe c))) where
-    fromRonProduct conf xs =
+    fromRonProduct conf cont xs =
         let field =
                 pack . fieldModifier conf $
                     selName (undefined :: t s (K1 R (Maybe c)) a)
+            ProductContext {constructorName} = cont
         in case xs of
             Left xs' -> case Vector.uncons xs' of
-                Nothing -> fail "Not enough elements in tuple"
+                Nothing -> fail $ "Not enough elements in tuple " <> constructorName
                 Just (x, xs'')
                     | Vector.null xs'' -> M1 <$>
                         let tryUnwrapped
                                 | implicitSome . decodeFlags $ conf =
                                     K1 . Just <$> fromRon x
                                 | otherwise =
-                                    fail "Not using decodeImplicitSome"
+                                    fail $ constructorName <> ": not using decodeImplicitSome"
                         in fromRonRec conf x <<|>> tryUnwrapped
-                    | otherwise -> fail "Trailing members in tuple"
+                    | otherwise -> fail $ "Trailing members in tuple " <> constructorName
             Right xs'
                 | implicitSome . decodeFlags $ conf ->
                     case Map.lookup field xs' of
@@ -513,32 +599,33 @@ instance {-# OVERLAPPING #-} (Selector s, FromRon c)
                                 wrapped = M1 <$> fromRonRec conf x
                             in wrapped <<|>> unwrapped
                 | otherwise -> case Map.lookup field xs' of
-                    Nothing -> fail "Field not present in record"
+                    Nothing -> fail $ "Field " <> unpack field <> " not present in record " <> constructorName
                     Just x -> M1 <$> fromRonRec conf x
 
 instance (Selector s, GFromRonRec f) => GFromRonProduct (M1 S s f) where
-    fromRonProduct conf xs =
+    fromRonProduct conf cont xs =
         let field = pack . fieldModifier conf $ selName (undefined :: t s f a)
+            ProductContext {constructorName} = cont
         in case xs of
             Left xs' -> case Vector.uncons xs' of
-                Nothing -> fail "Not enough elements in tuple"
+                Nothing -> fail $ "Not enough elements in tuple " <> constructorName
                 Just (x, xs'') | Vector.null xs'' -> M1 <$> fromRonRec conf x
-                               | otherwise -> fail "Trailing members in tuple"
+                               | otherwise -> fail $ "Trailing members in tuple " <> constructorName
             Right xs' -> case Map.lookup field xs' of
-                Nothing -> fail "Field not present in record"
+                Nothing -> fail $ "Field " <> unpack field <> " not present in record " <> constructorName
                 Just x -> M1 <$> fromRonRec conf x
 
 instance (ProductSize pl, GFromRonProduct pl, GFromRonProduct pr)
     => GFromRonProduct (pl :*: pr) where
-    fromRonProduct conf (Left xs) =
+    fromRonProduct conf cont (Left xs) =
         let sizel = productSize (Proxy @pl)
             (xsl, xsr) = Vector.splitAt sizel xs
         in (:*:)
-            <$> fromRonProduct conf (Left xsl)
-            <*> fromRonProduct conf (Left xsr)
-    fromRonProduct conf xs = (:*:)
-        <$> fromRonProduct conf xs
-        <*> fromRonProduct conf xs
+            <$> fromRonProduct conf cont (Left xsl)
+            <*> fromRonProduct conf cont (Left xsr)
+    fromRonProduct conf cont xs = (:*:)
+        <$> fromRonProduct conf cont xs
+        <*> fromRonProduct conf cont xs
 
 instance FromRon c => GFromRonRec (K1 R c) where
     fromRonRec _ x = K1 <$> fromRon x

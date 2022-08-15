@@ -1,5 +1,5 @@
 name:                ron-hs
-version:             0.3.1
+version:             0.3.2
 license:             BSD3
 author:              "d86leader"
 maintainer:          "d86leader@mail.com"
@@ -26,6 +26,7 @@ library:
   - attoparsec
   - bytestring
   - containers
+  - deepseq
   - hashable
   - scientific
   - template-haskell
@@ -51,6 +52,24 @@ tests:
     - tasty-quickcheck
     - text
     - vector
+    ghc-options:
+    - -Wno-all -Wdefault
+    - -Wincomplete-patterns -Werror=incomplete-patterns
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+benchmarks:
+  bench:
+    main: Bench.hs
+    source-dirs: bench
+    dependencies:
+    - base
+    - ron-hs
+    - base16-bytestring
+    - bytestring
+    - criterion
+    - text
     ghc-options:
     - -Wno-all -Wdefault
     - -Wincomplete-patterns -Werror=incomplete-patterns
