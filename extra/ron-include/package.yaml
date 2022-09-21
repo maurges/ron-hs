@@ -1,0 +1,33 @@
+name:                ron-include
+version:             0.1.0.0
+license:             BSD3
+author:              "d86leader"
+maintainer:          "d86leader@mail.com"
+synopsis:            A tool to include RON documents inside one another
+
+ghc-options:
+- -Wall -Wcompat
+- -Werror=incomplete-patterns
+
+default-extensions:
+- BangPatterns
+- LambdaCase
+- MultiWayIf
+- NamedFieldPuns
+- OverloadedStrings
+- ScopedTypeVariables
+- TypeApplications
+- TypeOperators
+
+executables:
+  ron-include:
+    main:                Main.hs
+    source-dirs:         src
+    dependencies:
+    - base
+    - ron-hs
+    - bytestring
+    - containers
+    - directory
+    - optparse-applicative
+    - text

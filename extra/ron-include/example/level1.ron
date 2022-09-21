@@ -1,0 +1,5 @@
+{
+    1: Left("ok"),
+    2: Right(ron'include("level2.ron")),
+    3: Right(ron'include("subdir/level2.ron")),
+}

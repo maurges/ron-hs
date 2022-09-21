@@ -1,0 +1,39 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           ron-include
+version:        0.1.0.0
+synopsis:       A tool to include RON documents inside one another
+author:         d86leader
+maintainer:     d86leader@mail.com
+license:        BSD3
+build-type:     Simple
+
+executable ron-include
+  main-is: Main.hs
+  other-modules:
+      Paths_ron_include
+  hs-source-dirs:
+      src
+  default-extensions:
+      BangPatterns
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      OverloadedStrings
+      ScopedTypeVariables
+      TypeApplications
+      TypeOperators
+  ghc-options: -Wall -Wcompat -Werror=incomplete-patterns
+  build-depends:
+      base
+    , bytestring
+    , containers
+    , directory
+    , optparse-applicative
+    , ron-hs
+    , text
+  default-language: Haskell2010

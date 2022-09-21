@@ -1,0 +1,4 @@
+Document (
+    foo: "bar",
+    kek: ron'include("level1.ron"),
+)

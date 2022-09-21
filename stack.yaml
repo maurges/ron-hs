@@ -1,6 +1,7 @@
-resolver: lts-18.10
+resolver: nightly-2022-06-06
 packages:
 - .
 - extra/ron-lens
 - extra/ron-optics
+- extra/ron-include
 system-ghc: true
