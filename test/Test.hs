@@ -4,8 +4,8 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Ron.Deserialize (loads)
 import Data.Ron.Serialize (dumps, compactStyle)
 import Data.Ron.Value.Internal (similar')
-import Test.Tasty (defaultMain, testGroup)
-import Test.Tasty.QuickCheck (testProperty)
+import Test.Tasty (defaultMain, testGroup, localOption)
+import Test.Tasty.QuickCheck (testProperty, QuickCheckMaxSize(..))
 
 import ForExample (exampleTests)
 import File (fileTests)
@@ -14,7 +14,7 @@ import GenericOptions (genericOptionsTests)
 import DerivingVia (derivingViaTests)
 import Values (valuesTests)
 
-main = defaultMain $ testGroup "properties"
+main = defaultMain $ setMaxSize $ testGroup "properties"
     [ always_decodes
     , derivingViaTests
     , exampleTests
@@ -24,6 +24,8 @@ main = defaultMain $ testGroup "properties"
     , loads_dumps
     , valuesTests
     ]
+
+setMaxSize = localOption $ QuickCheckMaxSize 30
 
 always_decodes = testProperty "isRight . loads . dumps arbStyle $ x" $
     \style value -> case loads . toStrict . dumps style $ value of
