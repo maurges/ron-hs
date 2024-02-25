@@ -8,7 +8,7 @@ module Data.Ron.Deserialize
     -- * Exceptions
     , ParseError, DecodeError
     -- * Parsers
-    , document, toplevel, value
+    , document, toplevel, value, ronWhitespace
     ) where
 
 import Control.Applicative ((<|>), liftA2)
@@ -113,7 +113,10 @@ loadFile' path = loadsLazy <$> Lazy.readFile path
 
 --- Parsers
 
--- | Like toplevel that also consumes whitespace before it, and expects eof after itself
+-- | A parser for a complete Ron document, consisting of a single value.
+-- Expects EOF at the end. Will parse Ron notation, or a toplevel record with
+-- no braces, or a toplevel list with no braces; the latter two are ron-hs
+-- extensions.
 document :: Parser Value
 document = ws *> toplevel <* do
     peekChar >>= \case
@@ -121,7 +124,10 @@ document = ws *> toplevel <* do
         Just s -> fail $ "Expected eof, got data starting with " <> show s
 
 -- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
--- 'value'. The first two are ron-hs extensions
+-- 'value'. The first two are ron-hs extensions.
+--
+-- This is similar to 'document', but won't parse whitespace before self, and
+-- doesn't expect EOF at the end.
 toplevel :: Parser Value
 toplevel = peekChar' >>= \case
     -- raw string, algebraic struct, or a field in toplevel 'record'
@@ -177,7 +183,11 @@ toplevelRecord firstField = do
         _ -> fail "Expecting , at toplevel record"
 
 -- | A ron value as defined by the ron-rs spec (with minor deviations described
--- in this package)
+-- in this package).
+--
+-- Unlike 'toplevel', this won't parse bare toplevel list or record. Unlike
+-- 'document' and like 'toplevel', won't parse whitespace before self, and
+-- doesn't expect EOF at the end.
 value :: Parser Value
 value = peekChar' >>= \case
     c | startsNumber c -> intOrFloat
@@ -188,6 +198,11 @@ value = peekChar' >>= \case
       | startsStruct c -> recordOrTuple ""
       | startsIdentifier c -> identifierLike c
       | otherwise -> fail $ "Unexpected symbol: " <> show c
+
+-- | Whitespace as defined by ron-rs spec. Useful if you want to build your
+-- custom attoparsec parsers from 'value' or 'toplevel'.
+ronWhitespace :: Parser ()
+ronWhitespace = ws
 
 
 --- Numbers ---

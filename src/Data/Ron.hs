@@ -1,4 +1,6 @@
 -- | Most common ron definitions are collected in this module
+--
+-- TODO: overview of functionality: encode-decode, class, DerivingVia with all its options, generics, internals
 module Data.Ron
     ( -- * Serialize and deserialize
       encode, encodeFile

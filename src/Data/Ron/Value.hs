@@ -40,11 +40,12 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- | A RON value represented in haskell. This is the intermediate
 -- representation between string and your own type.
 --
--- @()@ is represented as @Unit ""@
+-- @()@ is represented as @Unit ""@. Anonymous records and tuples are
+-- similarily represented by having an empty name.
 --
--- 'Tuple' and 'Record' contents are not empty when parsed, since the empty
--- contents denote a 'Unit'. Attempting to dump an empty tuple or record may
--- produce unexpected results, so don't do that either.
+-- 'Tuple' and 'Record' contents are guaranteed to be not empty when parsed,
+-- since the empty contents denote a 'Unit'. Attempting to dump an empty tuple
+-- or record may produce unexpected results, so don't do that, use 'Unit's instead.
 data Value
     = Integral !Integer
     | Floating !Scientific

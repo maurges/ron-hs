@@ -1,6 +1,8 @@
 {-# LANGUAGE KindSignatures, DataKinds #-}
 {-# LANGUAGE UndecidableInstances, FlexibleContexts #-} -- type family in instance head
 {-# LANGUAGE PolyKinds #-}
+
+-- | Allows deriving ron encoding-decoding instances with @DerivingVia@. See 'RonWith'
 module Data.Ron.Class.Deriving
     ( RonWith (..)
     -- * Settings
@@ -15,8 +17,8 @@ module Data.Ron.Class.Deriving
     , SkipSingleConstructor
     , NoSkipSingleConstructor
     -- * Undelying typeclasses
-    , ReifySettingsOptions (..)
-    , ReifyFlagOptions (..)
+    , ReflectSettingsOptions (..)
+    , ReflectFlagOptions (..)
     ) where
 
 import Data.Char (isUpper, toLower, isLower)
@@ -35,103 +37,124 @@ import Data.Ron.Class
 --              via RonWith '[FieldsDropPrefix, EncodeWith SkipSingleConstructor] MyType
 -- @
 --
+-- This is identical to
+--
+-- @
+--      data MyType = MyType {...}
+--          deriving (Eq, Show, Generic)
+--      instance ToRon MyType where
+--          toRon =
+--              let settings
+--                  = (\s{encodeFlags} -> s{encodeFlags = encodeFlags{skipSingleConstructor = True}})
+--                  . (\s{fieldModifier} -> s{dropPrefix . fieldModifier})
+--                  $ laxRonSettings
+--              in toRonGeneric settings
+-- @
+--
 -- The options are applied left to right, and the starting options are
 -- 'laxRonSettings'
+--
+-- All of built-in settings are documented in 'Data.Ron.Class.Deriving' module.
+-- You can define your own settings by creating new datatypes and creating
+-- instances for 'ReflectSettingsOptions' or 'ReflectFlagOptions'
 newtype RonWith s a = RonWith a
 
-instance (Generic a, GToRon (Rep a), ReifySettingsList s)
+instance (Generic a, GToRon (Rep a), ReflectSettingsList s)
     => ToRon (RonWith s a) where
-    toRon (RonWith x) = flip toRonGeneric x $ reifyL (Proxy @s) laxRonSettings
+    toRon (RonWith x) = flip toRonGeneric x $ reflectL (Proxy @s) laxRonSettings
 
-instance (Generic a, GFromRon (Rep a), ReifySettingsList s)
+instance (Generic a, GFromRon (Rep a), ReflectSettingsList s)
     => FromRon (RonWith s a) where
-    fromRon = fmap RonWith . fromRonGeneric (reifyL (Proxy @s) laxRonSettings)
+    fromRon = fmap RonWith . fromRonGeneric (reflectL (Proxy @s) laxRonSettings)
 
-class ReifySettingsList a where
-    reifyL :: Proxy a -> RonSettings -> RonSettings
+class ReflectSettingsList a where
+    reflectL :: Proxy a -> RonSettings -> RonSettings
 
-instance ReifySettingsList '[] where
-    reifyL Proxy s = s
-    {-# INLINE reifyL #-}
-instance (ReifySettingsOptions s, ReifySettingsList ss)
-    => ReifySettingsList (s:ss) where
-    reifyL Proxy
-        = reifyL (Proxy @ss)
-        . reifyS (Proxy @s)
-    {-# INLINE reifyL #-}
+instance ReflectSettingsList '[] where
+    reflectL Proxy s = s
+    {-# INLINE reflectL #-}
+instance (ReflectSettingsOptions s, ReflectSettingsList ss)
+    => ReflectSettingsList (s:ss) where
+    reflectL Proxy
+        = reflectL (Proxy @ss)
+        . reflectS (Proxy @s)
+    {-# INLINE reflectL #-}
 
 -- | Replace the current settings with 'strictRonSettings'
 data UseStrict
--- | Sets a flag in @encodeFlags@. Can set anything with 'ReifyFlagOptions'
+-- | Sets a flag in @encodeFlags@. Can set anything with 'ReflectFlagOptions'
 -- instances, like 'ImplicitSome', 'SkipSingleConstructor'
 data EncodeWith a
--- | Same as above for @decodeFlags@
+-- | Sets a flag in @decodeFlags@. Can set anything with 'ReflectFlagOptions'
+-- instances
 data DecodeWith a
--- | Same as setting both options above
+-- | Same as setting both 'EncodeWith' and 'DecodeWith'
 data ConvertWith a
 -- | Convert fields to snake case. If your field also has prefix, you want to
--- have it after 'FieldsDropPrefix', as options are applied left to right
+-- have this option after 'FieldsDropPrefix', as options are applied left to
+-- right
 data FieldsToSnakeCase
--- | Drop the usual lens prefix: underscore followed by several lowercase
--- letters; regex for this is @s\/^_[[:lowercase:]]+([[:uppercase:]].*)\/\\1\/@.
--- You probably want to use this field modifier before other field modifiers,
--- as they are applied left to right
+-- | Drop the prefix that is usually used with lenses, that is an underscore
+-- followed by several lowercase letters; regex for this prefix is
+-- @s\/^_[[:lowercase:]]+([[:uppercase:]].*)\/\\1\/@. You probably want to use
+-- this field modifier before other field modifiers, as they are applied left
+-- to right
 data FieldsDropPrefix
 
 -- | Typeclass for you to implement your own options. Here's how
 -- 'FieldsToSnakeCase' uses it:
 --
 -- @
---      instance ReifySettingsOptions FieldsToSnakeCase where
---          reifyS Proxy s@RonSettings {fieldModifier} = s
+--      instance ReflectSettingsOptions FieldsToSnakeCase where
+--          reflectS Proxy s@RonSettings {fieldModifier} = s
 --              { fieldModifier = toSnake . fieldModifier }
 -- @
 --
 -- Be careful when composing functions to apply them after the already present,
 -- to preserve the left-to-right semantics of adding the options
-class ReifySettingsOptions a where
-    reifyS :: Proxy a -> RonSettings -> RonSettings
+class ReflectSettingsOptions a where
+    reflectS :: Proxy a -> RonSettings -> RonSettings
 
--- | @implicitSome .~ True@
+-- | Encode or decode flag that sets 'Data.Ron.Class.implicitSome' to @True@
 data ImplicitSome
--- | @implicitSome .~ False@
+-- | Encode or decode flag that sets 'Data.Ron.Class.implicitSome' to @False@
 data NoImplicitSome
--- | @skipSingleConstructor .~ True@
+-- | Encode or decode flag that sets 'Data.Ron.Class.skipSingleConstructor' to @True@
 data SkipSingleConstructor
--- | @skipSingleConstructor .~ False@
+-- | Encode or decode flag that sets 'Data.Ron.Class.skipSingleConstructor' to @False@
 data NoSkipSingleConstructor
 
 -- | Typeclass for you to implement your own symmetric options. Here's how
 -- 'ImplicitSome' uses it
 --
 -- @
---      instance ReifyFlagOptions ImplicitSome where
---          reifyF Proxy flags = flags { implicitSome = True }
+--      instance ReflectFlagOptions ImplicitSome where
+--          reflectF Proxy flags = flags { implicitSome = True }
 -- @
-class ReifyFlagOptions a where
-    reifyF :: Proxy a -> RonFlags -> RonFlags
+class ReflectFlagOptions a where
+    reflectF :: Proxy a -> RonFlags -> RonFlags
 
-instance ReifySettingsOptions UseStrict where
-    reifyS Proxy _ = strictRonSettings
-    {-# INLINE reifyS #-}
+instance ReflectSettingsOptions UseStrict where
+    reflectS Proxy _ = strictRonSettings
+    {-# INLINE reflectS #-}
 
-instance ReifyFlagOptions a => ReifySettingsOptions (EncodeWith a) where
-    reifyS Proxy s@RonSettings {encodeFlags} = s
-        { encodeFlags = reifyF (Proxy @a) encodeFlags }
-    {-# INLINE reifyS #-}
-instance ReifyFlagOptions a => ReifySettingsOptions (DecodeWith a) where
-    reifyS Proxy s@RonSettings {decodeFlags} = s
-        { decodeFlags = reifyF (Proxy @a) decodeFlags }
-    {-# INLINE reifyS #-}
-instance ReifyFlagOptions a => ReifySettingsOptions (ConvertWith a) where
-    reifyS Proxy s@RonSettings {encodeFlags, decodeFlags} = s
-        { encodeFlags = reifyF (Proxy @a) encodeFlags
-        , decodeFlags = reifyF (Proxy @a) decodeFlags
+instance ReflectFlagOptions a => ReflectSettingsOptions (EncodeWith a) where
+    reflectS Proxy s@RonSettings {encodeFlags} = s
+        { encodeFlags = reflectF (Proxy @a) encodeFlags }
+    {-# INLINE reflectS #-}
+instance ReflectFlagOptions a => ReflectSettingsOptions (DecodeWith a) where
+    reflectS Proxy s@RonSettings {decodeFlags} = s
+        { decodeFlags = reflectF (Proxy @a) decodeFlags }
+    {-# INLINE reflectS #-}
+instance ReflectFlagOptions a => ReflectSettingsOptions (ConvertWith a) where
+    reflectS Proxy s@RonSettings {encodeFlags, decodeFlags} = s
+        { encodeFlags = reflectF (Proxy @a) encodeFlags
+        , decodeFlags = reflectF (Proxy @a) decodeFlags
         }
-    {-# INLINE reifyS #-}
+    {-# INLINE reflectS #-}
 
-instance ReifySettingsOptions FieldsDropPrefix where
-    reifyS Proxy conf@RonSettings {fieldModifier} = conf
+instance ReflectSettingsOptions FieldsDropPrefix where
+    reflectS Proxy conf@RonSettings {fieldModifier} = conf
         { fieldModifier = dropPrefix . fieldModifier }
         where
             dropPrefix ('_':s) =
@@ -139,16 +162,16 @@ instance ReifySettingsOptions FieldsDropPrefix where
                     "" -> '_':s
                     c:s' -> toLower c : s'
             dropPrefix s = s
-    {-# INLINE reifyS #-}
+    {-# INLINE reflectS #-}
 
-instance ReifySettingsOptions FieldsToSnakeCase where
-    reifyS Proxy s@RonSettings {fieldModifier} = s
+instance ReflectSettingsOptions FieldsToSnakeCase where
+    reflectS Proxy s@RonSettings {fieldModifier} = s
         { fieldModifier = toSnake . fieldModifier }
         where
          toSnake = camelTo2 '_'
-    {-# INLINE reifyS #-}
+    {-# INLINE reflectS #-}
 
--- | Better version of 'camelTo'. Example where it works better:
+-- | Better version of camelTo. Example where it works better:
 --
 --   > camelTo '_' "CamelAPICase" == "camel_apicase"
 --   > camelTo2 '_' "CamelAPICase" == "camel_api_case"
@@ -164,22 +187,22 @@ camelTo2 c = map toLower . go2 . go1
         go2 (l:u:xs) | isLower l && isUpper u = l : c : u : go2 xs
         go2 (x:xs) = x : go2 xs
 
-instance ReifyFlagOptions ImplicitSome where
-    reifyF Proxy f =
+instance ReflectFlagOptions ImplicitSome where
+    reflectF Proxy f =
         f { implicitSome = True }
-    {-# INLINE reifyF #-}
+    {-# INLINE reflectF #-}
 
-instance ReifyFlagOptions NoImplicitSome where
-    reifyF Proxy f =
+instance ReflectFlagOptions NoImplicitSome where
+    reflectF Proxy f =
         f { implicitSome = False }
-    {-# INLINE reifyF #-}
+    {-# INLINE reflectF #-}
 
-instance ReifyFlagOptions SkipSingleConstructor where
-    reifyF Proxy f =
+instance ReflectFlagOptions SkipSingleConstructor where
+    reflectF Proxy f =
         f { skipSingleConstructor = True }
-    {-# INLINE reifyF #-}
+    {-# INLINE reflectF #-}
 
-instance ReifyFlagOptions NoSkipSingleConstructor where
-    reifyF Proxy f =
+instance ReflectFlagOptions NoSkipSingleConstructor where
+    reflectF Proxy f =
         f { skipSingleConstructor = False }
-    {-# INLINE reifyF #-}
+    {-# INLINE reflectF #-}
