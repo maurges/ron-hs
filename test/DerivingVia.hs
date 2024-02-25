@@ -31,11 +31,11 @@ record1ron = Record "Record1"
 
 data AppendA
 data AppendB
-instance ReifySettingsOptions AppendA where
-    reifyS _ s@RonSettings {fieldModifier} = s
+instance ReflectSettingsOptions AppendA where
+    reflectS _ s@RonSettings {fieldModifier} = s
         { fieldModifier = (<> "aaa") . fieldModifier }
-instance ReifySettingsOptions AppendB where
-    reifyS _ s@RonSettings {fieldModifier} = s
+instance ReflectSettingsOptions AppendB where
+    reflectS _ s@RonSettings {fieldModifier} = s
         { fieldModifier = (<> "bbb") . fieldModifier }
 
 newtype Record2 = Record2
