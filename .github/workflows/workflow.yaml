@@ -17,7 +17,8 @@ jobs:
           - "lts-19.33" # ghc 9.0.2
           - "lts-20.26" # ghc 9.2.8
           - "lts-21.22" # ghc 9.4.8
-          - "nightly-2023-11-23" # ghc 9.6.3
+          - "lts-22.11" # ghc 9.6.4
+          - "nightly-2024-02-24" # ghc 9.8.1
           # TODO: lts-16.31 fails because of missing TH.Lift on Scientific
           # TODO: lts-14.27 fails because of missing optics package
 
