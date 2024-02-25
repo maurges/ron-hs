@@ -1,9 +1,13 @@
-name:                ron-hs
-version:             0.3.2
-license:             BSD3
-author:              "d86leader"
-maintainer:          "d86leader@mail.com"
-synopsis:            RON format implementation in haskell
+name:                "ron-hs"
+version:             "0.4.0"
+license:             "Apache-2.0 OR MIT"
+license-file:        "LICENSE-APACHE"
+author:              "morj"
+maintainer:          "hackage@morj.men"
+
+synopsis: "RON format implementation in haskell"
+homepage: "https://github.com/maurges/ron-hs"
+category: "Text"
 
 ghc-options:
 - -Wall -Wcompat
