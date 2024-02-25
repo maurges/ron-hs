@@ -1,11 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
--- | Ron routines for serialization
+
+-- | Definitions for serializing values into bytes. When serializing, you must
+-- choose a formatting option defined at 'SerializeSettings'
 module Data.Ron.Serialize
     ( encode, encodeFile
     , dumps, dumpFile
     -- * Style options
-    , haskellStyle, rustStyle, compactStyle
     , SerializeSettings (..)
+    , haskellStyle, rustStyle, compactStyle
     , CommaStyle (..)
     -- * Low-level builders
     , ronBuilder
@@ -32,6 +34,7 @@ import qualified Data.Vector as Vector
 import Data.Ron.Value
 
 
+-- | Style of comma in compound values
 data CommaStyle
     = CommaHistoric
     -- ^ Like in json, comma after value without trailing
@@ -43,23 +46,27 @@ data CommaStyle
 
 data SerializeSettings = SerializeSettings
     { commaStyle :: !CommaStyle
+    -- ^ How to separate values in compounds (tuples, records, maps, lists)
     , indent :: !Int
-    -- ^ Setting this to zero also disables line breaks
+    -- ^ Amount of spaces to indent with. Setting this to zero also disables
+    -- line breaks
     , singleElementSpecial :: !Bool
     -- ^ When a compound type only contains one element, this compound value is
     -- printed on one line
     , unpackToplevel :: !Bool
-    -- ^ Toplevel struct and list are unpacked to not include the constructor
-    -- and brackets
+    -- ^ Toplevel record and list are unpacked to not include the constructor
+    -- and brackets. This is useful for human-consumed files, and looks similar
+    -- to yaml but with commas. Warning: ron-rs doesn't support reading this
     , openBracketOnSameLine :: !Bool
-    -- ^ For compound types, does the bracket go on a new line or stays on the
-    -- same line as the constructor
+    -- ^ For compound types, does the opening bracket go on a new line or stays
+    -- on the same line as the constructor
     , closeBracketOnSameLine :: !Bool
-    -- ^ For compound types, does the bracket go on a new line or stays on the
-    -- same line as the last element. Some people in haskell like this one as
-    -- True, and I think lispers do as well
+    -- ^ For compound types, does the closing bracket go on a new line or stays
+    -- on the same line as the last element. Setting this to True is a popular
+    -- default in some haskell autoformat programs
     , spaceAfterColon :: !Bool
-    -- ^ Useful for a compact representation
+    -- ^ Should a space character be put after colon in records and maps.
+    -- Useful as @False@ for compact representation
     } deriving (Eq, Show)
 
 -- | Style similar to what is produced in haskell with stylish-haskell or
@@ -91,8 +98,9 @@ rustStyle = SerializeSettings
     , spaceAfterColon = True
     }
 
--- | All whitespace is disabled. Does not unpack toplevel, so you can set that
--- if you want an even compacter style
+-- | All whitespace is disabled. Does not unpack toplevel for compatability, so
+-- you can set that if you want an even compacter style that can't be read by
+-- ron-rs
 compactStyle :: SerializeSettings
 compactStyle = SerializeSettings
     { commaStyle = CommaHistoric
@@ -128,7 +136,8 @@ dumpFile settings path value = withFile path WriteMode $ \handle -> do
     hSetBuffering handle $ BlockBuffering Nothing -- hmm
     hPutBuilder handle $ ronBuilder settings value
 
--- | The builder producing the serialized representation
+-- | The builder producing the serialized representation. You can use this to
+-- write ron to outputs not supported by this library, like pipes or conduits
 ronBuilder :: SerializeSettings -> Value -> Builder
 ronBuilder SerializeSettings {..} = toplevel where
     deeper !lvl = lvl + indent

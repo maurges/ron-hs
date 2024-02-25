@@ -1,3 +1,8 @@
+[0.4.0]
+- Rename reify to reflect, turns out I confused the two terms (breaking change!)
+- Greatly improve docs
+- Add explicit license
+
 [0.3.2]
 - Add more instances for base and containers
 - Change String instance to resemble Text

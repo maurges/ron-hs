@@ -1,14 +1,18 @@
 {-# LANGUAGE DefaultSignatures, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE EmptyCase #-}
+
+-- | Definition for ron conversion classes, and for using 'GHC.Generics' to
+-- encode any datatype into RON.
 module Data.Ron.Class
     ( ToRon (..), FromRon (..)
     , ParseResult
-    -- * Generic encoding
-    , toRonGeneric
-    , fromRonGeneric
+    -- * Settings for generic encoding
     , RonSettings (..)
     , RonFlags (..)
     , strictRonSettings, laxRonSettings
+    -- * Generic encoding
+    , toRonGeneric
+    , fromRonGeneric
     , GToRon, GFromRon
     ) where
 
@@ -44,9 +48,14 @@ import Data.Ron.Value
 import Prelude hiding (fail)
 
 
--- | In the future this might become more smart and report the error location.
--- In the present we don't even have the notion of "location" in RON. So this
--- sort-of MonadFail thing will do
+-- | When decoding from ron, this type is used to indicate decode failure.
+-- During decoding, multiple failures may be concatenated with a semicolon, and
+-- for some functions the string will be thrown with
+-- 'Data.Ron.Deserialize.DecodeError'. When implementing your own decoding
+-- functions, you should put short one-sentence error descriptions.
+--
+-- For the next major release, we plan to replace it with a better mechanism
+-- that reports error locations and supports long-form content.
 type ParseResult = Either String
 fail :: String -> ParseResult a
 fail = Left
@@ -65,6 +74,16 @@ pa <<|>> pb = case pa of
 
 -- | A class of values that can be encoded to RON format.
 --
+-- There are several ways to define an instance:
+--
+--   1. By producing a 'Value' by hand
+--   2. By using 'toRonGeneric'
+--   3. By @DerivingVia@ extension and using 'Data.Ron.Class.Deriving.RonWith'
+--
+-- When using the second option, the encoding parameters are specified with
+-- 'RonSettings'. With the third option, the same parameters are specified by a
+-- list of settings found in 'Data.Ron.Class.Deriving'.
+--
 -- The default implementation uses generic encoding with 'laxRonSettings'. You
 -- can use other settings like this:
 --
@@ -78,8 +97,12 @@ pa <<|>> pb = case pa of
 --              }
 -- @
 --
--- Or instead of implementing it by hand you can use @DerivingVia@ extension
--- and derive via 'Data.Ron.Class.Deriving.RonWith'.
+-- Or like this:
+--
+-- @
+--      deriving via (RonWith '[UseStrict, EncodeWith SkipSingleConstructor, EncodeWith ImplicitSome])
+--          instance ToRon MyType
+-- @
 class ToRon a where
     toRon :: a -> Value
     default toRon :: (Generic a, GToRon (Rep a)) => a -> Value
@@ -87,7 +110,13 @@ class ToRon a where
 
 -- | A class of values that can be restored from RON format
 --
--- The default implementation uses generic encoding with 'laxRonSettings'. You
+-- There are several ways to define an instance:
+--
+--   1. By deconstructing a 'Value' by hand and producing a value of your type
+--   2. By using 'fromRonGeneric'
+--   3. By @DerivingVia@ extension and using 'Data.Ron.Class.Deriving.RonWith'
+--
+-- The default implementation uses generic decoding with 'laxRonSettings'. You
 -- can use other settings like this:
 --
 -- @
@@ -100,8 +129,12 @@ class ToRon a where
 --              }
 -- @
 --
--- Or instead of implementing it by hand you can use @DerivingVia@ extension
--- and derive via 'Data.Ron.Class.Deriving.RonWith'.
+-- Or like this:
+--
+-- @
+--      deriving via (RonWith '[UseStrict, DecodeWith SkipSingleConstructor, DecodeWith ImplicitSome])
+--          instance FromRon MyType
+-- @
 class FromRon a where
     fromRon :: Value -> ParseResult a
     default fromRon :: (Generic a, GFromRon (Rep a)) => Value -> ParseResult a
@@ -333,20 +366,24 @@ instance (FromRon a1, FromRon a2) => FromRon (a1, a2) where
 -- separately
 data RonFlags = RonFlags
     { implicitSome :: !Bool
-    -- ^ Like ron-rs's @implicit_some@: 'Nothing' in record fields is
-    -- represented by omission of the field
+    -- ^ Like ron-rs's @implicit_some@. When set to True, 'Nothing' in record
+    -- fields is represented by omission of the field
     , skipSingleConstructor :: !Bool
     -- ^ When a datatype has a single constructor, encoding will omit it and
-    -- decoding will ignore it missing
+    -- decoding will ignore it missing, turning the representation into a tuple
+    -- or an anonymous record.
     } deriving (Eq, Show)
 
 -- | Settings for use with 'Generic' RON encoding/decoding
 data RonSettings = RonSettings
     { fieldModifier :: !(String -> String)
-    -- ^ Field renamer in RON representation
+    -- ^ Every field will be renamed using the supplied function
     , constructorModifier :: !(String -> String)
+    -- ^ Every constructor will be renamed using the supplied function
     , decodeFlags :: !RonFlags
+    -- ^ Options that apply to encoding separately from decoding
     , encodeFlags :: !RonFlags
+    -- ^ Options that apply to decoding separately from encoding
     }
 
 data SumContext = SumContext

@@ -1,16 +1,18 @@
-cabal-version: 1.12
+cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
 name:           ron-hs
-version:        0.3.2
+version:        0.4.0
 synopsis:       RON format implementation in haskell
-author:         d86leader
-maintainer:     d86leader@mail.com
-license:        BSD3
-license-file:   LICENSE
+category:       Text
+homepage:       https://github.com/maurges/ron-hs
+author:         morj
+maintainer:     hackage@morj.men
+license:        (Apache-2.0 OR MIT)
+license-file:   LICENSE-APACHE
 build-type:     Simple
 
 library
@@ -24,6 +26,8 @@ library
       Data.Ron.Value
       Data.Ron.Value.Internal
   other-modules:
+      Paths_ron_hs
+  autogen-modules:
       Paths_ron_hs
   hs-source-dirs:
       src
@@ -63,6 +67,8 @@ test-suite test
       Optics.Ron.Settings
       Values
       Paths_ron_hs
+  autogen-modules:
+      Paths_ron_hs
   hs-source-dirs:
       test
   default-extensions:
@@ -97,6 +103,8 @@ benchmark bench
   other-modules:
       Escape
       File
+      Paths_ron_hs
+  autogen-modules:
       Paths_ron_hs
   hs-source-dirs:
       bench
