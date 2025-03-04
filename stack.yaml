@@ -1,4 +1,4 @@
-resolver: lts-21.23
+resolver: lts-22.43
 packages:
 - .
 system-ghc: true
