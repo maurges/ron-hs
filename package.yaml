@@ -4,10 +4,23 @@ license:             "Apache-2.0 OR MIT"
 license-file:        "LICENSE-APACHE"
 author:              "morj"
 maintainer:          "hackage@morj.men"
+extra-doc-files:     "changelog.txt"
 
 synopsis: "RON format implementation in haskell"
-homepage: "https://github.com/maurges/ron-hs"
+git: "https://github.com/maurges/ron-hs"
 category: "Text"
+description: |
+  This is an implementation of [RON data format](https://github.com/ron-rs/ron)
+  in haskell. This project is still early in its life, but has been tried in some
+  of my webservers like [re](https://github.com/maurges/re) and
+  [dwierz](https://git.morj.men/morj/dwierz)
+
+  RON is a human-readable structured format. The name means "rusty object
+  notation": it takes inspiration from rust language, but is not its subset at
+  all. Ron is well-suited for haskell because it supports algebraic datatypes.
+
+  For usage info and examples, see the API docs. For more info on development,
+  see the git repository page.
 
 ghc-options:
 - -Wall -Wcompat
