@@ -123,7 +123,7 @@ document = ws *> toplevel <* do
         Nothing -> pure ()
         Just s -> fail $ "Expected eof, got data starting with " <> show s
 
--- | Toplevel is either a toplevel 'list', toplevel 'record', or a regular ron
+-- | Toplevel is either a toplevel list, toplevel record, or a regular ron
 -- 'value'. The first two are ron-hs extensions.
 --
 -- This is similar to 'document', but won't parse whitespace before self, and
