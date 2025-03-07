@@ -22,6 +22,13 @@ jobs:
           - "nightly-2025-03-01" # ghc 9.10.1
           # TODO: lts-16.31 fails because of missing TH.Lift on Scientific
           # TODO: lts-14.27 fails because of missing optics package
+        exclude:
+          # Macos now has problems installing latest ghc, sigh
+          - os: macOS-latest
+            resolver: "lts-18.28"
+          - os: macOS-latest
+            resolver: "lts-19.33"
+
 
     runs-on: ${{ matrix.os }}
 
