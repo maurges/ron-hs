@@ -9,18 +9,7 @@ extra-doc-files:     "changelog.txt"
 synopsis: "RON format implementation in haskell"
 git: "https://github.com/maurges/ron-hs"
 category: "Text"
-description: |
-  This is an implementation of [RON data format](https://github.com/ron-rs/ron)
-  in haskell. This project is still early in its life, but has been tried in some
-  of my webservers like [re](https://github.com/maurges/re) and
-  [dwierz](https://git.morj.men/morj/dwierz)
-
-  RON is a human-readable structured format. The name means "rusty object
-  notation": it takes inspiration from rust language, but is not its subset at
-  all. Ron is well-suited for haskell because it supports algebraic datatypes.
-
-  For usage info and examples, see the API docs. For more info on development,
-  see the git repository page.
+description: "RON (Rusty Object Notation) format implementation in haskell"
 
 ghc-options:
 - -Wall -Wcompat
@@ -39,14 +28,14 @@ default-extensions:
 library:
   source-dirs: src
   dependencies:
-  - "base >= 4.14.3 && < 4.21"
+  - "base >= 4.14.3 && < 4.22"
   - "attoparsec >= 0.13.2 && < 0.15"
   - "bytestring >= 0.10.12 && < 0.13"
-  - "containers >= 0.6.4 && < 0.8"
-  - "deepseq >= 1.4.4 && < 1.6"
+  - "containers >= 0.6.4 && < 0.9"
+  - "deepseq >= 1.4.4 && < 1.7"
   - "hashable >= 1.3.0 && < 1.6"
   - "scientific >= 0.3.7 && < 0.4"
-  - "template-haskell >= 2.16.0 && < 2.23"
+  - "template-haskell >= 2.16.0 && < 2.24"
   - "text >= 1.2.4 && < 2.2"
   - "vector >= 0.12.3 && < 0.14"
   - "QuickCheck >= 2.14.2 && < 2.16"
@@ -57,19 +46,19 @@ tests:
     main: Test.hs
     source-dirs: test
     dependencies:
-    - base
+    - "base >= 4.14.3 && < 4.22"
     - ron-hs
-    - QuickCheck
-    - bytestring
-    - containers
-    - directory
-    - optics-core
-    - optics-th
-    - tasty
-    - tasty-hunit
-    - tasty-quickcheck
-    - text
-    - vector
+    - "QuickCheck >= 2.14.2 && < 2.16"
+    - "bytestring >= 0.10.12 && < 0.13"
+    - "containers >= 0.6.4 && < 0.9"
+    - "directory >= 1.3.6 && < 1.4"
+    - "optics-core >= 0.3 && < 0.5"
+    - "optics-th >= 0.3 && < 0.5"
+    - "tasty >= 1.4.2 && < 1.6"
+    - "tasty-hunit >= 0.10 && < 0.11"
+    - "tasty-quickcheck >= 0.10 && < 0.12"
+    - "text >= 1.2.4 && < 2.2"
+    - "vector >= 0.12.3 && < 0.14"
     ghc-options:
     - -Wno-all -Wdefault
     - -Wincomplete-patterns -Werror=incomplete-patterns
@@ -82,12 +71,12 @@ benchmarks:
     main: Bench.hs
     source-dirs: bench
     dependencies:
-    - base
+    - "base >= 4.14.3 && < 4.22"
     - ron-hs
-    - base16-bytestring
-    - bytestring
-    - criterion
-    - text
+    - "base16-bytestring >= 1.0.2 && < 1.1"
+    - "bytestring >= 0.10.12 && < 0.13"
+    - "criterion >= 1.5.13 && < 1.7"
+    - "text >= 1.2.4 && < 2.2"
     ghc-options:
     - -Wno-all -Wdefault
     - -Wincomplete-patterns -Werror=incomplete-patterns
